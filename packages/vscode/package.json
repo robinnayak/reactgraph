@@ -1,0 +1,48 @@
+{
+  "name": "reactgraph-vscode",
+  "publisher": "reactgraph",
+  "displayName": "ReactGraph",
+  "description": "Visualize your React/Next.js component hierarchy, hooks, and API connections",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/extension.js",
+  "icon": "assets/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/reactgraph"
+  },
+  "engines": {
+    "vscode": "^1.105.0"
+  },
+  "activationEvents": [
+    "onCommand:reactgraph.openGraph"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "reactgraph.openGraph",
+        "title": "ReactGraph: Open Graph"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "reactgraph.openGraph"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "package": "npx @vscode/vsce package --no-dependencies"
+  },
+  "dependencies": {
+    "@reactgraph/core": "*"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.0.0",
+    "@types/vscode": "^1.105.0",
+    "typescript": "^5.9.2"
+  }
+}
