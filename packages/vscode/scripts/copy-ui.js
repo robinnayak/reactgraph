@@ -11,4 +11,9 @@ if (!fs.existsSync(src)) {
 
 fs.mkdirSync(dest, { recursive: true });
 fs.cpSync(src, dest, { recursive: true, force: true });
+const copiedJson = path.join(dest, "reactgraph.json");
+if (fs.existsSync(copiedJson)) {
+  fs.rmSync(copiedJson);
+  console.log("Removed stale reactgraph.json from webview dist");
+}
 console.log("UI dist copied to dist/webview");

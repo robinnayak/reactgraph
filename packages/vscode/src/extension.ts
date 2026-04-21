@@ -1,9 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import * as vscode from "vscode";
-import { analyze, type GraphData } from "@reactgraph/core";
+import type { GraphData } from "@reactgraph/core";
 
 let currentPanel: vscode.WebviewPanel | undefined;
+
+function loadAnalyze(): typeof import("@reactgraph/core").analyze {
+  const { analyze } = require("@reactgraph/core") as typeof import("@reactgraph/core");
+  return analyze;
+}
 
 function injectGraphData(html: string, graphData: GraphData): string {
   const bridge = `
@@ -49,42 +54,46 @@ async function renderPanel(
   panel: vscode.WebviewPanel,
   workspaceRoot: string
 ): Promise<void> {
+  const analyze = loadAnalyze();
   const graphData = await analyze(workspaceRoot);
   panel.webview.html = await buildHtml(context, panel, graphData);
 }
 
 export function activate(context: vscode.ExtensionContext): void {
   const disposable = vscode.commands.registerCommand("reactgraph.openGraph", async () => {
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!workspaceFolder) {
-      void vscode.window.showErrorMessage("ReactGraph needs an open workspace folder.");
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri?.fsPath;
+    if (!workspaceRoot) {
+      void vscode.window.showErrorMessage("ReactGraph: No workspace folder open.");
       return;
     }
 
-    const workspaceRoot = workspaceFolder.uri.fsPath;
-    currentPanel =
-      currentPanel ??
-      vscode.window.createWebviewPanel("reactgraph", "ReactGraph", vscode.ViewColumn.Beside, {
-        enableScripts: true,
-        retainContextWhenHidden: true
+    try {
+      currentPanel =
+        currentPanel ??
+        vscode.window.createWebviewPanel("reactgraph", "ReactGraph", vscode.ViewColumn.Beside, {
+          enableScripts: true,
+          retainContextWhenHidden: true
+        });
+
+      currentPanel.onDidDispose(() => {
+        currentPanel = undefined;
       });
 
-    currentPanel.onDidDispose(() => {
-      currentPanel = undefined;
-    });
+      currentPanel.webview.onDidReceiveMessage(async (message) => {
+        if (message?.type === "openFile" && typeof message.filePath === "string") {
+          const fullPath = path.isAbsolute(message.filePath)
+            ? message.filePath
+            : path.join(workspaceRoot, message.filePath);
+          const doc = await vscode.workspace.openTextDocument(fullPath);
+          await vscode.window.showTextDocument(doc);
+        }
+      });
 
-    currentPanel.webview.onDidReceiveMessage(async (message) => {
-      if (message?.type === "openFile" && typeof message.filePath === "string") {
-        const fullPath = path.isAbsolute(message.filePath)
-          ? message.filePath
-          : path.join(workspaceRoot, message.filePath);
-        const doc = await vscode.workspace.openTextDocument(fullPath);
-        await vscode.window.showTextDocument(doc);
-      }
-    });
-
-    await renderPanel(context, currentPanel, workspaceRoot);
-    currentPanel.reveal(vscode.ViewColumn.Beside);
+      await renderPanel(context, currentPanel, workspaceRoot);
+      currentPanel.reveal(vscode.ViewColumn.Beside);
+    } catch (err) {
+      void vscode.window.showErrorMessage(`ReactGraph: Analysis failed - ${(err as Error).message}`);
+    }
   });
 
   const saveWatcher = vscode.workspace.onDidSaveTextDocument(async () => {
@@ -92,7 +101,12 @@ export function activate(context: vscode.ExtensionContext): void {
     if (!workspaceRoot || !currentPanel) {
       return;
     }
-    await renderPanel(context, currentPanel, workspaceRoot);
+
+    try {
+      await renderPanel(context, currentPanel, workspaceRoot);
+    } catch (err) {
+      void vscode.window.showErrorMessage(`ReactGraph: Analysis failed - ${(err as Error).message}`);
+    }
   });
 
   context.subscriptions.push(disposable, saveWatcher);

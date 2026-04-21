@@ -1,8 +1,12 @@
+node_modules/**
 src/**
 scripts/**
 .turbo/**
-node_modules/**
 tsconfig.json
+*.map
+*.ts
 !dist/**
-dist/**/*.d.ts
-dist/**/*.map
+!assets/icon.png
+!LICENSE
+!package.json
+!README.md

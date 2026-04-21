@@ -9,6 +9,7 @@
     "build": "turbo run build",
     "dev": "turbo run dev",
     "analyze": "node packages/core/dist/cli.js",
+    "view": "node scripts/view-graph.mjs",
     "test": "turbo run test"
   },
   "devDependencies": {

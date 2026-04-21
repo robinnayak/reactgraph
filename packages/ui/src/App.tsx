@@ -7,7 +7,7 @@ import StatusBar from "./components/StatusBar";
 import Toolbar from "./components/Toolbar";
 import { useGraphData } from "./hooks/useGraphData";
 import { useSearch } from "./hooks/useSearch";
-import type { FilterState, GraphNodeRecord } from "./types";
+import type { FilterState, GraphData, GraphNodeRecord } from "./types";
 
 const initialFilters: FilterState = {
   components: true,
@@ -16,7 +16,15 @@ const initialFilters: FilterState = {
   context: true
 };
 
-function buildContextNodes(graph: ReturnType<typeof useGraphData>["data"]): GraphNodeRecord[] {
+const emptyGraph: GraphData = {
+  pages: [],
+  components: [],
+  hooks: [],
+  apis: [],
+  edges: []
+};
+
+function buildContextNodes(graph: GraphData): GraphNodeRecord[] {
   const contextIds = new Set(graph.edges.filter((edge) => edge.relationshipType === "provides").map((edge) => edge.target));
   return Array.from(contextIds).map((id) => ({
     id,
@@ -27,13 +35,31 @@ function buildContextNodes(graph: ReturnType<typeof useGraphData>["data"]): Grap
   }));
 }
 
-function isValidGraphData(value: unknown): value is ReturnType<typeof useGraphData>["data"] {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
+function EmptyState(props: { message: string; helper: string }) {
+  const { message, helper } = props;
 
-  const candidate = value as Record<string, unknown>;
-  return ["pages", "components", "hooks", "apis", "edges"].every((key) => Array.isArray(candidate[key]));
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        height: "100vh",
+        background: "#0d1117",
+        color: "#8b949e",
+        fontFamily: "Inter, system-ui, sans-serif",
+        gap: "16px"
+      }}
+    >
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#30363d" strokeWidth="1.5">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 8v4M12 16h.01" />
+      </svg>
+      <h2 style={{ color: "#e6edf3", margin: 0, fontSize: "18px" }}>{message}</h2>
+      <p style={{ margin: 0, fontSize: "14px", textAlign: "center", maxWidth: "420px" }}>{helper}</p>
+    </div>
+  );
 }
 
 export default function App() {
@@ -44,42 +70,11 @@ export default function App() {
   const [impactMode, setImpactMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [flow, setFlow] = useState<ReactFlowInstance | null>(null);
-  const hasInjectedGraphData = isValidGraphData(window.__REACTGRAPH_DATA__);
 
-  if (!hasInjectedGraphData) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          height: "100vh",
-          background: "#0d1117",
-          color: "#8b949e",
-          fontFamily: "Inter, system-ui, sans-serif",
-          gap: "16px"
-        }}
-      >
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#30363d" strokeWidth="1.5">
-          <circle cx="12" cy="12" r="10" />
-          <path d="M12 8v4M12 16h.01" />
-        </svg>
-        <h2 style={{ color: "#e6edf3", margin: 0, fontSize: "18px" }}>No graph data found</h2>
-        <p style={{ margin: 0, fontSize: "14px", textAlign: "center", maxWidth: "320px" }}>
-          Open the command palette in VS Code and run
-          <br />
-          <code style={{ color: "#79c0ff" }}>ReactGraph: Open Graph</code>
-          <br />
-          to analyze your project.
-        </p>
-      </div>
-    );
-  }
-
+  const graph = data ?? emptyGraph;
   const allNodes = useMemo<GraphNodeRecord[]>(
-    () => [...data.pages, ...data.components, ...data.hooks, ...data.apis, ...buildContextNodes(data)],
-    [data]
+    () => [...graph.pages, ...graph.components, ...graph.hooks, ...graph.apis, ...buildContextNodes(graph)],
+    [graph]
   );
   const deferredQuery = useDeferredValue(searchQuery);
   const searchedNodes = useSearch(allNodes, deferredQuery);
@@ -88,25 +83,24 @@ export default function App() {
   const dependencies = useMemo(
     () =>
       selectedNode
-        ? data.edges
+        ? graph.edges
             .filter((edge) => edge.source === selectedNode.id)
             .map((edge) => nodeMap.get(edge.target))
             .filter((node): node is GraphNodeRecord => Boolean(node))
         : [],
-    [data.edges, nodeMap, selectedNode]
+    [graph.edges, nodeMap, selectedNode]
   );
   const usedIn = useMemo(
     () =>
       selectedNode
-        ? data.edges
+        ? graph.edges
             .filter((edge) => edge.target === selectedNode.id)
             .map((edge) => nodeMap.get(edge.source))
             .filter((node): node is GraphNodeRecord => Boolean(node))
         : [],
-    [data.edges, nodeMap, selectedNode]
+    [graph.edges, nodeMap, selectedNode]
   );
-
-  const filteredPages = data.pages.filter((page) => searchedNodes.some((node) => node.id === page.id));
+  const filteredPages = graph.pages.filter((page) => searchedNodes.some((node) => node.id === page.id));
 
   const openInIde = (filePath: string) => {
     if ("acquireVsCodeApi" in window) {
@@ -115,6 +109,22 @@ export default function App() {
     }
     window.location.href = `vscode://file/${filePath}`;
   };
+
+  if (loading) {
+    return <EmptyState helper="ReactGraph is loading your project graph." message="Loading graph data..." />;
+  }
+
+  if (!data) {
+    return (
+      <EmptyState
+        helper={
+          error ??
+          "No graph data was found. In VS Code use ReactGraph: Open Graph, or in browser mode start the local viewer with npm run view -- \"<project>\"."
+        }
+        message="No graph data found"
+      />
+    );
+  }
 
   return (
     <div className="app-shell">
@@ -125,7 +135,7 @@ export default function App() {
           setSelectedPageId(pageId);
           setSelectedNodeId(pageId);
         }}
-        pages={filteredPages.length > 0 ? filteredPages : data.pages}
+        pages={filteredPages.length > 0 ? filteredPages : graph.pages}
         searchQuery={searchQuery}
         selectedPageId={selectedPageId}
       />
@@ -139,21 +149,20 @@ export default function App() {
           onToggleImpact={() => setImpactMode((current) => !current)}
         />
 
-        {loading ? <div className="state-panel">Loading graph data...</div> : null}
         {error ? <div className="state-panel state-panel--error">{error}</div> : null}
 
         <GraphCanvas
           filters={filters}
-          graph={data}
+          graph={graph}
           impactMode={impactMode}
           onFlowReady={setFlow}
           onSelectNode={setSelectedNodeId}
           selectedNodeId={selectedNodeId}
-          selectedPageId={selectedPageId ?? data.pages[0]?.id ?? null}
+          selectedPageId={selectedPageId ?? graph.pages[0]?.id ?? null}
         />
 
         <StatusBar
-          edgeCount={data.edges.length}
+          edgeCount={graph.edges.length}
           nodes={allNodes}
           selectedName={selectedNode?.name}
           visibleCount={searchedNodes.length}
@@ -162,7 +171,7 @@ export default function App() {
 
       <NodeInspector
         dependencies={dependencies}
-        edges={data.edges}
+        edges={graph.edges}
         node={selectedNode}
         onClose={() => setSelectedNodeId(null)}
         onJumpToNode={setSelectedNodeId}
