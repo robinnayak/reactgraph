@@ -6,9 +6,10 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "turbo run build",
+    "build": "turbo run build && npm run sync-viewer-assets",
     "dev": "turbo run dev",
     "analyze": "node packages/core/dist/cli.js",
+    "sync-viewer-assets": "node packages/core/scripts/copy-viewer-assets.cjs",
     "view": "node scripts/view-graph.mjs",
     "test": "turbo run test"
   },

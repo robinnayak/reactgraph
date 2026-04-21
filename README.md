@@ -58,7 +58,7 @@ The graph opens in a side panel inside VS Code.
 
 ## Quick Start: CLI
 
-Use this when you want analysis output in the terminal.
+Use this when you want analysis output in the terminal from your current project directory.
 
 Install the package directly from npm in your project:
 
@@ -66,10 +66,10 @@ Install the package directly from npm in your project:
 npm install @reactgraph/core
 ```
 
-Then run the analyzer with `npx`:
+Then run the analyzer with the installed CLI binary:
 
 ```bash
-npx @reactgraph/core analyze .
+npx reactgraph analyze .
 ```
 
 Or programmatically:
@@ -123,13 +123,43 @@ console.log("Edges found:", graph.edges.length);
 node analyze.mjs
 ```
 
-You can also use the installed package from the terminal without writing a script:
+You can also use the installed package directly from your current project terminal without writing a script:
 
 ```bash
-npx @reactgraph/core analyze .
+npx reactgraph analyze .
 ```
 
 This gives you the analyzer and CLI only. It does not include the visual UI by itself.
+
+## Quick Start: Visual Graph From Your Current Project Terminal
+
+If you install `@reactgraph/core`, you can also view the graph outside VS Code directly from the project you want to analyze.
+
+1. Install the package in your project:
+
+```bash
+npm install @reactgraph/core
+```
+
+2. From that same project directory, either open the browser automatically:
+
+```bash
+npx reactgraph view .
+```
+
+Or start the local viewer server without auto-opening the browser:
+
+```bash
+npx reactgraph serve .
+```
+
+3. If you use `serve`, open:
+
+```txt
+http://127.0.0.1:4174
+```
+
+This means users do not need to navigate back to the ReactGraph monorepo just to see the UI.
 
 ## Quick Start: Test Locally Without Publishing to npm
 
@@ -170,11 +200,19 @@ console.log("Edges found:", graph.edges.length);
 node analyze.mjs
 ```
 
+You can also use the linked CLI directly from that project:
+
+```bash
+npx reactgraph analyze .
+npx reactgraph serve .
+npx reactgraph view .
+```
+
 This uses the package exactly like a published npm install, but everything stays local on your machine.
 
 ## Quick Start: Local Browser Viewer
 
-Use this when you want the ReactGraph UI in your browser without installing the VS Code extension.
+Use this when you want the ReactGraph UI in your browser without installing the VS Code extension and without installing the npm package into another project.
 
 1. Build the repo from the monorepo root:
 
@@ -207,9 +245,29 @@ This command:
 - serves the built UI from `packages/ui/dist`
 - exposes the graph data at `/reactgraph.json`
 
-## Why `npm link @reactgraph/core` does not show the UI
+## Why the command to run is `reactgraph`, not `@reactgraph/core`
 
-`npm link @reactgraph/core` links only the analyzer package.
+`@reactgraph/core` is the npm package name.
+`reactgraph` is the CLI binary name it installs into your project.
+
+So after `npm install @reactgraph/core` or `npm link @reactgraph/core`, use:
+
+```bash
+npx reactgraph analyze .
+npx reactgraph serve .
+npx reactgraph view .
+```
+
+Not:
+
+```bash
+npx @reactgraph/core analyze .
+npx @reactgraph/core view .
+```
+
+## Why the local monorepo browser viewer still exists
+
+`npm link @reactgraph/core` links the analyzer package and CLI into another project.
 
 That package exports:
 
@@ -225,7 +283,7 @@ It does not include:
 
 So this is expected:
 
-- `npm link @reactgraph/core` works for scripts and terminal analysis
+- `npm link @reactgraph/core` works for scripts, terminal analysis, and the installed `reactgraph` CLI
 - the `.vsix` shows the full UI inside VS Code
 - `npm run view -- "<project>"` shows the UI in your browser from the monorepo
 
@@ -350,7 +408,13 @@ Only the CLI or programmatic analyzer writes `reactgraph.json`. Otherwise ReactG
 ReactGraph currently focuses on project-defined hooks and relationships in your codebase, not every framework hook imported from React or Next.js.
 
 **Can I use this outside VS Code?**
-Yes. Use the browser viewer with:
+Yes. Either install `@reactgraph/core` in your project and run:
+
+```bash
+npx reactgraph view .
+```
+
+Or use the monorepo browser viewer with:
 
 ```bash
 npm run view -- "C:\path\to\project"

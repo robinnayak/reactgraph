@@ -5,13 +5,14 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "reactgraph": "dist/cli.js"
+    "reactgraph": "bin/reactgraph"
   },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "postbuild": "node scripts/copy-viewer-assets.cjs",
     "dev": "tsc -p tsconfig.json --watch",
     "test": "vitest run --pool=threads"
   },
