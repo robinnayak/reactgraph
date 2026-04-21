@@ -4,7 +4,6 @@ import {
   TS_GLOBS,
   createNodeId,
   dedupeBy,
-  expressionText,
   inferTypeFromExpression,
   parseModule,
   resolveProjectFiles,
@@ -21,14 +20,6 @@ function createApiNode(endpoint: string, method: Method, payload?: Record<string
     type: "api",
     payload
   };
-}
-
-function getStringArgument(node: TSESTree.CallExpression, index: number): string | undefined {
-  const argument = node.arguments[index];
-  if (!argument || argument.type !== "Literal" || typeof argument.value !== "string") {
-    return undefined;
-  }
-  return argument.value;
 }
 
 function getPayloadFromArgument(
@@ -48,6 +39,107 @@ function getPayloadFromArgument(
   return Object.keys(payload).length > 0 ? payload : undefined;
 }
 
+function normalizeEndpoint(raw: string | undefined): string | undefined {
+  if (!raw) {
+    return undefined;
+  }
+
+  const endpoint = raw.trim();
+  if (endpoint.startsWith("/api/") || endpoint.startsWith("/")) {
+    return endpoint;
+  }
+
+  return undefined;
+}
+
+function getStringValue(node: TSESTree.Node | undefined, source: string): string | undefined {
+  if (!node) {
+    return undefined;
+  }
+
+  if (node.type === "Literal" && typeof node.value === "string") {
+    return node.value;
+  }
+
+  if (node.type === "TemplateLiteral" && node.expressions.length === 0) {
+    return node.quasis.map((quasi) => quasi.value.cooked ?? "").join("");
+  }
+
+  if (node.range) {
+    const text = source.slice(node.range[0], node.range[1]).trim();
+    if ((text.startsWith("'") && text.endsWith("'")) || (text.startsWith("\"") && text.endsWith("\""))) {
+      return text.slice(1, -1);
+    }
+    if (text.startsWith("`") && text.endsWith("`")) {
+      return text.slice(1, -1);
+    }
+  }
+
+  return undefined;
+}
+
+function getMethodFromOptions(node: TSESTree.CallExpression): Method {
+  const optionsArg = node.arguments[1];
+  if (optionsArg?.type !== "ObjectExpression") {
+    return "GET";
+  }
+
+  for (const property of optionsArg.properties) {
+    if (
+      property.type === "Property" &&
+      property.key.type === "Identifier" &&
+      property.key.name === "method" &&
+      property.value.type === "Literal" &&
+      typeof property.value.value === "string"
+    ) {
+      const upper = property.value.value.toUpperCase();
+      if (upper === "GET" || upper === "POST" || upper === "PUT" || upper === "DELETE") {
+        return upper;
+      }
+    }
+  }
+
+  return "GET";
+}
+
+function getQueryEndpoint(config: TSESTree.ObjectExpression, source: string): string | undefined {
+  for (const property of config.properties) {
+    if (property.type !== "Property" || property.key.type !== "Identifier") {
+      continue;
+    }
+
+    if (property.key.name === "queryFn") {
+      const fn = property.value;
+      if (fn.type === "ArrowFunctionExpression" || fn.type === "FunctionExpression") {
+        let endpoint: string | undefined;
+        traverse(fn.body, (node) => {
+          if (endpoint || node.type !== "CallExpression") {
+            return;
+          }
+
+          if (node.callee.type === "Identifier" && node.callee.name === "fetch") {
+            endpoint = normalizeEndpoint(getStringValue(node.arguments[0] as TSESTree.Node | undefined, source));
+          }
+        });
+        if (endpoint) {
+          return endpoint;
+        }
+      }
+    }
+
+    if (property.key.name === "queryKey" && property.value.type === "ArrayExpression") {
+      for (const element of property.value.elements) {
+        const endpoint = normalizeEndpoint(getStringValue(element as TSESTree.Node | undefined, source));
+        if (endpoint) {
+          return endpoint;
+        }
+      }
+    }
+  }
+
+  return undefined;
+}
+
 export function findApis(projectRoot: string): ApiNode[] {
   const apis: ApiNode[] = [];
 
@@ -61,54 +153,34 @@ export function findApis(projectRoot: string): ApiNode[] {
         }
 
         if (node.callee.type === "Identifier" && node.callee.name === "fetch") {
-          const endpoint = getStringArgument(node, 0);
-          if (!endpoint?.startsWith("/api/")) {
-            return;
+          const endpoint = normalizeEndpoint(getStringValue(node.arguments[0] as TSESTree.Node | undefined, module.source));
+          if (endpoint) {
+            apis.push(createApiNode(endpoint, getMethodFromOptions(node)));
           }
-
-          let method: Method = "GET";
-          const optionsArg = node.arguments[1];
-          if (optionsArg?.type === "ObjectExpression") {
-            for (const property of optionsArg.properties) {
-              if (
-                property.type === "Property" &&
-                property.key.type === "Identifier" &&
-                property.key.name === "method" &&
-                property.value.type === "Literal" &&
-                typeof property.value.value === "string"
-              ) {
-                const upper = property.value.value.toUpperCase();
-                if (upper === "GET" || upper === "POST" || upper === "PUT" || upper === "DELETE") {
-                  method = upper;
-                }
-              }
-            }
-          }
-
-          apis.push(createApiNode(endpoint, method));
           return;
         }
 
         if (
           node.callee.type === "MemberExpression" &&
-          node.callee.object.type === "Identifier" &&
-          node.callee.object.name === "axios" &&
-          node.callee.property.type === "Identifier"
+          node.callee.property.type === "Identifier" &&
+          node.callee.object.type === "Identifier"
         ) {
-          const propertyName = node.callee.property.name.toUpperCase();
-          if (!["GET", "POST", "PUT", "DELETE"].includes(propertyName)) {
+          const method = node.callee.property.name.toUpperCase();
+          if (!["GET", "POST", "PUT", "DELETE"].includes(method)) {
             return;
           }
-          const endpoint = getStringArgument(node, 0);
+
+          const endpoint = normalizeEndpoint(getStringValue(node.arguments[0] as TSESTree.Node | undefined, module.source));
           if (!endpoint) {
             return;
           }
-          apis.push(createApiNode(endpoint, propertyName as Method, getPayloadFromArgument(node.arguments[1], module.source)));
+
+          apis.push(createApiNode(endpoint, method as Method, getPayloadFromArgument(node.arguments[1], module.source)));
           return;
         }
 
         if (node.callee.type === "Identifier" && node.callee.name === "useSWR") {
-          const endpoint = getStringArgument(node, 0);
+          const endpoint = normalizeEndpoint(getStringValue(node.arguments[0] as TSESTree.Node | undefined, module.source));
           if (endpoint) {
             apis.push(createApiNode(endpoint, "GET"));
           }
@@ -116,31 +188,11 @@ export function findApis(projectRoot: string): ApiNode[] {
         }
 
         if (node.callee.type === "Identifier" && node.callee.name === "useQuery") {
-          const first = node.arguments[0];
-          if (first?.type === "ObjectExpression") {
-            for (const property of first.properties) {
-              if (
-                property.type === "Property" &&
-                property.key.type === "Identifier" &&
-                property.key.name === "queryKey" &&
-                property.value.type === "ArrayExpression"
-              ) {
-                let literal: TSESTree.Literal | undefined;
-                for (const element of property.value.elements) {
-                  if (element && element.type === "Literal" && typeof element.value === "string") {
-                    literal = element;
-                    break;
-                  }
-                }
-                if (literal) {
-                  apis.push(createApiNode(String(literal.value), "GET"));
-                }
-              }
-            }
-          } else {
-            const endpoint = expressionText(first as TSESTree.Node, module.source);
-            if (endpoint?.includes("/api/")) {
-              apis.push(createApiNode(endpoint.replace(/^['"`]|['"`]$/g, ""), "GET"));
+          const firstArg = node.arguments[0];
+          if (firstArg?.type === "ObjectExpression") {
+            const endpoint = getQueryEndpoint(firstArg, module.source);
+            if (endpoint) {
+              apis.push(createApiNode(endpoint, "GET"));
             }
           }
         }

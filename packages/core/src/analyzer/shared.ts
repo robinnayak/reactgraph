@@ -260,19 +260,29 @@ export function extractPropsFromTypeAliasOrInterface(
   typeNode: TSESTree.TSTypeAliasDeclaration | TSESTree.TSInterfaceDeclaration,
   source: string
 ): Prop[] {
-  const body =
-    typeNode.type === "TSTypeAliasDeclaration"
-      ? typeNode.typeAnnotation.type === "TSTypeLiteral"
-        ? typeNode.typeAnnotation
-        : null
-      : typeNode.body;
+  const members = getTypeMembers(typeNode.type === "TSTypeAliasDeclaration" ? typeNode.typeAnnotation : typeNode.body);
+  return extractPropsFromMembers(members, source);
+}
 
-  if (!body) {
+export function getTypeMembers(
+  typeNode: TSESTree.TypeNode | TSESTree.TSInterfaceBody | null | undefined
+): TSESTree.TypeElement[] {
+  if (!typeNode) {
     return [];
   }
 
-  const members = body.type === "TSInterfaceBody" ? body.body : body.members;
+  if (typeNode.type === "TSInterfaceBody") {
+    return typeNode.body;
+  }
 
+  if (typeNode.type === "TSTypeLiteral") {
+    return typeNode.members;
+  }
+
+  return [];
+}
+
+export function extractPropsFromMembers(members: TSESTree.TypeElement[], source: string): Prop[] {
   return members.flatMap((member) => {
     if (member.type !== "TSPropertySignature" || member.key.type !== "Identifier") {
       return [];

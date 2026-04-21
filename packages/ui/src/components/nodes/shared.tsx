@@ -34,17 +34,36 @@ export function NodeCard({ data }: NodeProps<BaseNodeData>) {
         </div>
         <div className="graph-node__path">{data.filePath}</div>
         {fields.length > 0 ? (
-          <div className="graph-node__fields">
+          <div
+            className="graph-node__fields"
+            style={{ borderTop: "1px solid #30363d", marginTop: 6, paddingTop: 6 }}
+          >
             {fields.slice(0, 3).map((field) => (
-              <div className="graph-node__field" key={`${field.name}:${field.type}`}>
-                <span className="graph-node__field-name">{field.name}</span>
-                <span className="graph-node__field-type">{field.type}</span>
-                <span className="graph-node__field-required">
-                  {field.required === false ? "?" : "✓"}
+              <div
+                className="graph-node__field"
+                key={`${field.name}:${field.type}`}
+                style={{ fontSize: 10, fontFamily: "monospace", lineHeight: "1.6" }}
+              >
+                <span className="graph-node__field-name" style={{ color: "#79c0ff" }}>
+                  {field.name}
+                </span>
+                <span style={{ color: "#8b949e" }}>: </span>
+                <span className="graph-node__field-type" style={{ color: "#ffa657" }}>
+                  {field.type}
+                </span>
+                <span
+                  className="graph-node__field-required"
+                  style={{ color: field.required === false ? "#8b949e" : "#3fb950", marginLeft: 4 }}
+                >
+                  {field.required === false ? "?" : "req"}
                 </span>
               </div>
             ))}
-            {fields.length > 3 ? <div className="graph-node__field-more">+ {fields.length - 3} more</div> : null}
+            {fields.length > 3 ? (
+              <div className="graph-node__field-more" style={{ fontSize: 10, color: "#8b949e", marginTop: 2 }}>
+                +{fields.length - 3} more
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>

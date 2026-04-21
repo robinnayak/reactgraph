@@ -1,8 +1,8 @@
 src/**
+scripts/**
 .turbo/**
-tsconfig.json
-*.tsbuildinfo
 node_modules/**
-npm-debug.log*
-yarn.lock
-pnpm-lock.yaml
+tsconfig.json
+!dist/**
+dist/**/*.d.ts
+dist/**/*.map

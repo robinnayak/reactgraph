@@ -1,13 +1,9 @@
-import fs from "node:fs/promises";
+import fs from "node:fs";
 import path from "node:path";
 import * as vscode from "vscode";
 import { analyze, type GraphData } from "@reactgraph/core";
 
 let currentPanel: vscode.WebviewPanel | undefined;
-
-function getUiDistPath(context: vscode.ExtensionContext): string {
-  return path.join(context.extensionPath, "..", "ui", "dist");
-}
 
 function injectGraphData(html: string, graphData: GraphData): string {
   const bridge = `
@@ -24,19 +20,23 @@ function injectGraphData(html: string, graphData: GraphData): string {
   return html.replace("</head>", `${bridge}</head>`);
 }
 
+function getWebviewDistUri(context: vscode.ExtensionContext): vscode.Uri {
+  return vscode.Uri.joinPath(context.extensionUri, "dist", "webview");
+}
+
 async function buildHtml(
   context: vscode.ExtensionContext,
   panel: vscode.WebviewPanel,
   graphData: GraphData
 ): Promise<string> {
-  const uiDist = getUiDistPath(context);
-  const indexPath = path.join(uiDist, "index.html");
-  let html = await fs.readFile(indexPath, "utf8");
+  const webviewDistUri = getWebviewDistUri(context);
+  const htmlPath = vscode.Uri.joinPath(webviewDistUri, "index.html");
+  let html = fs.readFileSync(htmlPath.fsPath, "utf8");
 
   html = html.replace(
     /(src|href)="(\/assets\/[^"]+)"/g,
-    (match: string, attribute: string, assetPath: string) => {
-      const assetUri = panel.webview.asWebviewUri(vscode.Uri.file(path.join(uiDist, assetPath)));
+    (_match: string, attribute: string, assetPath: string) => {
+      const assetUri = panel.webview.asWebviewUri(vscode.Uri.joinPath(webviewDistUri, assetPath));
       return `${attribute}="${assetUri}"`;
     }
   );

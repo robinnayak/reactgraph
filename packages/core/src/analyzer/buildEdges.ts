@@ -5,8 +5,6 @@ import {
   TS_GLOBS,
   createNodeId,
   dedupeBy,
-  expressionText,
-  getTypeText,
   inferTypeFromExpression,
   isHookName,
   parseModule,
@@ -25,6 +23,13 @@ interface NodeLookup {
   apisByEndpoint: Map<string, ApiNode>;
 }
 
+interface EdgeSeed {
+  source: string;
+  target: string;
+  relationshipType: Edge["relationshipType"];
+  props?: Prop[];
+}
+
 function buildLookup(
   pages: PageNode[],
   components: ComponentNode[],
@@ -41,6 +46,18 @@ function buildLookup(
   };
 }
 
+function getJsxTagName(name: TSESTree.JSXTagNameExpression): string | undefined {
+  if (name.type === "JSXIdentifier") {
+    return name.name;
+  }
+
+  if (name.type === "JSXMemberExpression") {
+    return name.property.name;
+  }
+
+  return undefined;
+}
+
 function getTargetComponentFromJsx(
   openingElement: TSESTree.JSXOpeningElement,
   imports: Map<string, string>,
@@ -48,8 +65,7 @@ function getTargetComponentFromJsx(
   lookup: NodeLookup,
   projectRoot: string
 ): ComponentNode | undefined {
-  const tagName =
-    openingElement.name.type === "JSXIdentifier" ? openingElement.name.name : undefined;
+  const tagName = getJsxTagName(openingElement.name);
   if (!tagName || tagName[0] !== tagName[0].toUpperCase()) {
     return undefined;
   }
@@ -59,7 +75,7 @@ function getTargetComponentFromJsx(
     const importedFile = resolveImportToFile(currentFile, importSource);
     if (importedFile) {
       const relative = relativeFilePath(projectRoot, importedFile);
-      return lookup.componentsByFile.get(relative);
+      return lookup.componentsByFile.get(relative) ?? lookup.componentsByName.get(tagName);
     }
   }
 
@@ -71,19 +87,27 @@ function propsFromJsx(openingElement: TSESTree.JSXOpeningElement, source: string
     if (attribute.type !== "JSXAttribute" || attribute.name.type !== "JSXIdentifier") {
       return [];
     }
+
     const value = attribute.value;
     if (!value) {
       return [{ name: attribute.name.name, type: "boolean", required: true }];
     }
+
     if (value.type === "Literal") {
       return [{ name: attribute.name.name, type: typeof value.value, required: true }];
     }
+
     if (value.type === "JSXExpressionContainer") {
       const expression = value.expression.type === "JSXEmptyExpression" ? undefined : value.expression;
-      const type =
-        expression ? inferTypeFromExpression(expression as TSESTree.Expression | undefined, source) : "unknown";
-      return [{ name: attribute.name.name, type, required: true }];
+      return [
+        {
+          name: attribute.name.name,
+          type: expression ? inferTypeFromExpression(expression as TSESTree.Expression, source) : "unknown",
+          required: true
+        }
+      ];
     }
+
     return [{ name: attribute.name.name, type: "string", required: true }];
   });
 }
@@ -99,65 +123,120 @@ function findParentOwner(
   );
 }
 
-function collectApiCalls(
+function getStringValue(node: TSESTree.Node | undefined, source: string): string | undefined {
+  if (!node) {
+    return undefined;
+  }
+
+  if (node.type === "Literal" && typeof node.value === "string") {
+    return node.value;
+  }
+
+  if (node.type === "TemplateLiteral" && node.expressions.length === 0) {
+    return node.quasis.map((quasi) => quasi.value.cooked ?? "").join("");
+  }
+
+  if (node.range) {
+    const text = source.slice(node.range[0], node.range[1]).trim();
+    if ((text.startsWith("'") && text.endsWith("'")) || (text.startsWith("\"") && text.endsWith("\""))) {
+      return text.slice(1, -1);
+    }
+    if (text.startsWith("`") && text.endsWith("`")) {
+      return text.slice(1, -1);
+    }
+  }
+
+  return undefined;
+}
+
+function getFetchMethod(node: TSESTree.CallExpression): ApiNode["method"] {
+  const optionsArg = node.arguments[1];
+  if (optionsArg?.type !== "ObjectExpression") {
+    return "GET";
+  }
+
+  for (const property of optionsArg.properties) {
+    if (
+      property.type === "Property" &&
+      property.key.type === "Identifier" &&
+      property.key.name === "method" &&
+      property.value.type === "Literal" &&
+      typeof property.value.value === "string"
+    ) {
+      const upper = property.value.value.toUpperCase();
+      if (upper === "GET" || upper === "POST" || upper === "PUT" || upper === "DELETE") {
+        return upper;
+      }
+    }
+  }
+
+  return "GET";
+}
+
+function collectApiCall(
   node: TSESTree.CallExpression,
   source: string
 ): { endpoint: string; method: ApiNode["method"] } | undefined {
   if (node.callee.type === "Identifier" && node.callee.name === "fetch") {
-    const endpoint = node.arguments[0];
-    if (endpoint?.type === "Literal" && typeof endpoint.value === "string") {
-      let method: ApiNode["method"] = "GET";
-      const options = node.arguments[1];
-      if (options?.type === "ObjectExpression") {
-        for (const property of options.properties) {
-          if (
-            property.type === "Property" &&
-            property.key.type === "Identifier" &&
-            property.key.name === "method" &&
-            property.value.type === "Literal" &&
-            typeof property.value.value === "string"
-          ) {
-            const upper = property.value.value.toUpperCase();
-            if (upper === "GET" || upper === "POST" || upper === "PUT" || upper === "DELETE") {
-              method = upper;
-            }
-          }
-        }
-      }
-      return { endpoint: endpoint.value, method };
+    const endpoint = getStringValue(node.arguments[0] as TSESTree.Node | undefined, source);
+    if (endpoint) {
+      return { endpoint, method: getFetchMethod(node) };
     }
   }
 
   if (
     node.callee.type === "MemberExpression" &&
     node.callee.object.type === "Identifier" &&
-    node.callee.object.name === "axios" &&
     node.callee.property.type === "Identifier"
   ) {
-    const endpoint = node.arguments[0];
-    if (endpoint?.type === "Literal" && typeof endpoint.value === "string") {
-      const upper = node.callee.property.name.toUpperCase();
-      if (upper === "GET" || upper === "POST" || upper === "PUT" || upper === "DELETE") {
-        return { endpoint: endpoint.value, method: upper };
+    const method = node.callee.property.name.toUpperCase();
+    if (method === "GET" || method === "POST" || method === "PUT" || method === "DELETE") {
+      const endpoint = getStringValue(node.arguments[0] as TSESTree.Node | undefined, source);
+      if (endpoint) {
+        return { endpoint, method: method as ApiNode["method"] };
       }
     }
   }
 
   if (node.callee.type === "Identifier" && node.callee.name === "useSWR") {
-    const endpoint = node.arguments[0];
-    if (endpoint?.type === "Literal" && typeof endpoint.value === "string") {
-      return { endpoint: endpoint.value, method: "GET" };
+    const endpoint = getStringValue(node.arguments[0] as TSESTree.Node | undefined, source);
+    if (endpoint) {
+      return { endpoint, method: "GET" };
     }
   }
 
   if (node.callee.type === "Identifier" && node.callee.name === "useQuery") {
-    const text = expressionText(node.arguments[0] as TSESTree.Node | undefined, source);
-    if (text?.includes("/api/")) {
-      return { endpoint: text.replace(/^[`'"]|[`'"]$/g, ""), method: "GET" };
+    const config = node.arguments[0];
+    if (config?.type === "ObjectExpression") {
+      let endpoint: string | undefined;
+      traverse(config, (nested) => {
+        if (endpoint || nested.type !== "CallExpression") {
+          return;
+        }
+
+        if (nested.callee.type === "Identifier" && nested.callee.name === "fetch") {
+          endpoint = getStringValue(nested.arguments[0] as TSESTree.Node | undefined, source);
+        }
+      });
+
+      if (endpoint) {
+        return { endpoint, method: "GET" };
+      }
     }
   }
 
   return undefined;
+}
+
+function createEdge(seed: EdgeSeed, index: number): Edge {
+  const propsKey = seed.props?.map((prop) => `${prop.name}:${prop.type}`).join(",") ?? "";
+  return {
+    id: `${seed.source}-${seed.target}-${index}-${Math.random().toString(36).slice(2)}`,
+    source: seed.source,
+    target: seed.target,
+    relationshipType: seed.relationshipType,
+    props: propsKey ? seed.props : undefined
+  };
 }
 
 export function buildEdges(
@@ -169,7 +248,7 @@ export function buildEdges(
 ): Edge[] {
   const root = projectRoot ?? process.cwd();
   const lookup = buildLookup(pages, components, hooks, apis);
-  const edges: Edge[] = [];
+  const seeds: EdgeSeed[] = [];
   const usedInPages = new Map<string, Set<string>>();
 
   for (const filePath of resolveProjectFiles(root, TS_GLOBS)) {
@@ -183,16 +262,15 @@ export function buildEdges(
     traverse(module.ast, (node) => {
       if (node.type === "JSXOpeningElement") {
         const component = getTargetComponentFromJsx(node, module.imports, filePath, lookup, root);
-        if (!component) {
+        if (!component || component.id === owner.id) {
           return;
         }
-        const props = propsFromJsx(node, module.source);
-        edges.push({
-          id: createNodeId("edge", `${owner.id}->${component.id}:renders:${props.map((prop) => prop.name).join(",")}`),
+
+        seeds.push({
           source: owner.id,
           target: component.id,
           relationshipType: "renders",
-          props
+          props: propsFromJsx(node, module.source)
         });
 
         if (owner.type === "page") {
@@ -203,15 +281,10 @@ export function buildEdges(
         }
       }
 
-      if (
-        node.type === "CallExpression" &&
-        node.callee.type === "Identifier" &&
-        isHookName(node.callee.name)
-      ) {
+      if (node.type === "CallExpression" && node.callee.type === "Identifier" && isHookName(node.callee.name)) {
         const hook = lookup.hooksByName.get(node.callee.name);
-        if (hook) {
-          edges.push({
-            id: createNodeId("edge", `${owner.id}->${hook.id}:uses`),
+        if (hook && hook.id !== owner.id) {
+          seeds.push({
             source: owner.id,
             target: hook.id,
             relationshipType: "uses"
@@ -229,28 +302,27 @@ export function buildEdges(
           firstArg?.type === "Identifier"
             ? firstArg.name
             : path.basename(filePath, path.extname(filePath));
-        const contextId = createNodeId("context", contextName);
-        edges.push({
-          id: createNodeId("edge", `${owner.id}->${contextId}:provides`),
+        seeds.push({
           source: owner.id,
-          target: contextId,
+          target: createNodeId("context", contextName),
           relationshipType: "provides"
         });
       }
 
-      if (node.type === "CallExpression" && owner.type === "hook") {
-        const apiCall = collectApiCalls(node, module.source);
+      if (node.type === "CallExpression") {
+        const apiCall = collectApiCall(node, module.source);
         if (!apiCall) {
           return;
         }
+
         const api = lookup.apisByEndpoint.get(apiCall.endpoint) ?? {
           id: createNodeId("api", `${apiCall.method}:${apiCall.endpoint}`),
           endpoint: apiCall.endpoint,
           method: apiCall.method,
           type: "api" as const
         };
-        edges.push({
-          id: createNodeId("edge", `${owner.id}->${api.id}:calls`),
+
+        seeds.push({
           source: owner.id,
           target: api.id,
           relationshipType: "calls"
@@ -265,5 +337,11 @@ export function buildEdges(
     component.isShared = usedByPages.length >= 2;
   }
 
-  return dedupeBy(edges, (edge) => edge.id);
+  const dedupedSeeds = dedupeBy(
+    seeds,
+    (edge) =>
+      `${edge.source}:${edge.target}:${edge.relationshipType}:${edge.props?.map((prop) => `${prop.name}:${prop.type}`).join("|") ?? ""}`
+  );
+
+  return dedupedSeeds.map((edge, index) => createEdge(edge, index));
 }

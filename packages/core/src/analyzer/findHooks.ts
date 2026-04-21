@@ -10,7 +10,8 @@ import {
   isHookName,
   parseModule,
   relativeFilePath,
-  resolveProjectFiles
+  resolveProjectFiles,
+  traverse
 } from "./shared.js";
 
 export function findHooks(projectRoot: string): HookNode[] {
@@ -19,6 +20,7 @@ export function findHooks(projectRoot: string): HookNode[] {
   for (const filePath of resolveProjectFiles(projectRoot, TS_GLOBS)) {
     try {
       const module = parseModule(filePath);
+      const relativePath = relativeFilePath(projectRoot, filePath);
 
       const pushHook = (
         name: string,
@@ -32,69 +34,56 @@ export function findHooks(projectRoot: string): HookNode[] {
         }
 
         hooks.push({
-          id: createNodeId("hook", relativeFilePath(projectRoot, filePath)),
+          id: createNodeId("hook", `${relativePath}:${name}`),
           name,
-          filePath: relativeFilePath(projectRoot, filePath),
+          filePath: relativePath,
           type: "hook",
           params: extractParams(fn.params, module.source),
           returns: extractReturns(fn, module.source)
         });
       };
 
-      const handleVariableDeclaration = (statement: TSESTree.VariableDeclaration) => {
-        for (const declaration of statement.declarations) {
-          if (
-            declaration.id.type === "Identifier" &&
-            declaration.init &&
-            (declaration.init.type === "ArrowFunctionExpression" ||
-              declaration.init.type === "FunctionExpression")
-          ) {
-            const isExported =
-              module.exports.has(declaration.id.name) || module.defaultExportName === declaration.id.name;
-            if (isExported) {
-              pushHook(declaration.id.name, declaration.init);
-            }
-          }
-        }
-      };
-
-      for (const statement of (module.ast as TSESTree.Program).body) {
-        if (statement.type === "FunctionDeclaration" && statement.id) {
-          const isExported = module.exports.has(statement.id.name) || module.defaultExportName === statement.id.name;
-          if (isExported) {
-            pushHook(statement.id.name, statement);
-          }
+      traverse(module.ast, (node, parent) => {
+        if (node.type === "FunctionDeclaration" && node.id) {
+          pushHook(node.id.name, node);
+          return;
         }
 
-        if (statement.type === "VariableDeclaration") {
-          handleVariableDeclaration(statement);
-        }
-
-        if (statement.type === "ExportNamedDeclaration" && statement.declaration) {
-          if (statement.declaration.type === "FunctionDeclaration" && statement.declaration.id) {
-            pushHook(statement.declaration.id.name, statement.declaration);
-          }
-          if (statement.declaration.type === "VariableDeclaration") {
-            handleVariableDeclaration(statement.declaration);
-          }
-        }
-
-      if (statement.type === "ExportDefaultDeclaration") {
-        const declaration = statement.declaration;
         if (
-          declaration.type === "ArrowFunctionExpression" ||
-          declaration.type === "FunctionExpression"
+          node.type === "VariableDeclarator" &&
+          node.id.type === "Identifier" &&
+          node.init &&
+          (node.init.type === "ArrowFunctionExpression" || node.init.type === "FunctionExpression")
         ) {
-          pushHook(inferAnonymousExportName(filePath), declaration);
-        } else if (declaration.type === "FunctionDeclaration") {
-          pushHook(declaration.id?.name ?? inferAnonymousExportName(filePath), declaration);
+          pushHook(node.id.name, node.init);
+          return;
         }
-      }
-      }
+
+        if (
+          node.type === "ExportDefaultDeclaration" &&
+          (node.declaration.type === "ArrowFunctionExpression" ||
+            node.declaration.type === "FunctionExpression" ||
+            node.declaration.type === "FunctionDeclaration")
+        ) {
+          const name =
+            "id" in node.declaration && node.declaration.id?.name
+              ? node.declaration.id.name
+              : inferAnonymousExportName(filePath);
+          pushHook(name, node.declaration);
+          return;
+        }
+
+        if (
+          node.type === "PropertyDefinition" &&
+          parent?.type === "ClassBody"
+        ) {
+          return;
+        }
+      });
     } catch (err) {
       console.warn(`[ReactGraph] Skipping ${filePath}: ${(err as Error).message}`);
     }
   }
 
-  return dedupeBy(hooks, (hook) => hook.id);
+  return dedupeBy(hooks, (hook) => `${hook.filePath}:${hook.name}`);
 }

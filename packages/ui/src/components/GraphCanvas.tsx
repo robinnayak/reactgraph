@@ -11,7 +11,7 @@ import ReactFlow, {
   type NodeTypes,
   type ReactFlowInstance
 } from "reactflow";
-import type { GraphData, GraphNodeRecord, FilterState } from "../types";
+import type { Edge as GraphEdge, GraphData, GraphNodeRecord, FilterState } from "../types";
 import type { BaseNodeData } from "./nodes/shared";
 import PageNode from "./nodes/PageNode";
 import ComponentNode from "./nodes/ComponentNode";
@@ -36,6 +36,14 @@ const colors = {
   context: "#7c3aed"
 } as const;
 
+function getNodeLabel(node: GraphNodeRecord): string {
+  return node.type === "api" ? node.endpoint : node.name;
+}
+
+function getNodeFilePath(node: GraphNodeRecord): string {
+  return "filePath" in node ? node.filePath : `${node.method} ${node.endpoint}`;
+}
+
 function buildContextNodes(graph: GraphData): GraphNodeRecord[] {
   const ids = new Set(graph.edges.filter((edge) => edge.relationshipType === "provides").map((edge) => edge.target));
   return Array.from(ids).map((id) => ({
@@ -47,89 +55,61 @@ function buildContextNodes(graph: GraphData): GraphNodeRecord[] {
   }));
 }
 
-function getLayoutedNodes(
-  nodes: GraphNodeRecord[],
-  edges: GraphData["edges"],
-  selectedPageId: string | null
-): FlowNode<BaseNodeData>[] {
-  const levelMap = new Map<string, number>();
-  const levelGroups = new Map<number, GraphNodeRecord[]>();
-  const componentIdsForPage = new Set(
-    edges
-      .filter((edge) => edge.relationshipType === "renders" && edge.source === selectedPageId)
-      .map((edge) => edge.target)
-  );
-
-  for (const node of nodes) {
-    let level = 3;
-    if (node.type === "page") {
-      level = 1;
-    } else if (componentIdsForPage.has(node.id)) {
-      level = 2;
-    } else if (node.type === "api" || node.type === "context") {
-      level = 4;
-    } else if (node.type === "hook") {
-      level = 3;
-    }
-    levelMap.set(node.id, level);
-    levelGroups.set(level, [...(levelGroups.get(level) ?? []), node]);
+function getEdgeColor(type: string): string {
+  switch (type) {
+    case "renders":
+      return "#2563eb";
+    case "uses":
+      return "#16a34a";
+    case "calls":
+      return "#ea580c";
+    case "provides":
+      return "#7c3aed";
+    default:
+      return "#30363d";
   }
-
-  return nodes.map((node) => {
-    const level = levelMap.get(node.id) ?? 3;
-    const group = levelGroups.get(level) ?? [node];
-    const index = group.findIndex((entry) => entry.id === node.id);
-    const spacing = 240;
-    const width = (group.length - 1) * spacing;
-    const x = 540 - width / 2 + index * spacing;
-    const yMap: Record<number, number> = { 1: 80, 2: 240, 3: 400, 4: 560 };
-
-    const fields =
-      node.type === "component"
-        ? node.props.map((prop) => ({ name: prop.name, type: prop.type, required: prop.required }))
-        : node.type === "hook"
-          ? node.params.map((param) => ({ name: param.name, type: param.type }))
-          : node.type === "context"
-            ? node.properties
-            : [];
-
-    return {
-      id: node.id,
-      type: node.type,
-      position: { x, y: yMap[level] ?? 400 },
-      data: {
-        label: node.type === "api" ? node.endpoint : node.name,
-        filePath: node.filePath,
-        kindLabel: node.type.toUpperCase(),
-        color: colors[node.type],
-        borderStyle: node.type === "context" ? "dashed" : "solid",
-        isShared: node.type === "component" ? node.isShared : false,
-        fields
-      }
-    };
-  });
 }
 
-function edgeStyleFor(source: GraphNodeRecord | undefined, target: GraphNodeRecord | undefined): Partial<FlowEdge> {
-  if (!source || !target) {
-    return {};
-  }
-  if (source.type === "page" && target.type === "component") {
-    return { style: { stroke: "#2563eb", strokeWidth: 3.5 } };
-  }
-  if (source.type === "component" && target.type === "component") {
-    return { style: { stroke: "#16a34a", strokeWidth: 3 } };
-  }
-  if (source.type === "component" && target.type === "hook") {
-    return { style: { stroke: "#16a34a", strokeWidth: 3 } };
-  }
-  if (source.type === "hook" && target.type === "api") {
-    return { style: { stroke: "#ea580c", strokeWidth: 2.5 } };
-  }
-  if (target.type === "context" || source.type === "context") {
-    return { style: { stroke: "#7c3aed", strokeWidth: 2.5, strokeDasharray: "6 4" } };
-  }
-  return { style: { stroke: "#8b949e", strokeWidth: 2 } };
+function getLayoutedNodes(
+  nodes: GraphNodeRecord[],
+  edges: GraphEdge[]
+): { id: string; position: { x: number; y: number } }[] {
+  void edges;
+
+  const levelMap: Record<string, number> = {
+    page: 0,
+    component: 1,
+    hook: 2,
+    api: 3,
+    context: 3
+  };
+
+  const yPositions = [80, 260, 440, 620];
+  const xPadding = 260;
+  const levels: Record<number, GraphNodeRecord[]> = { 0: [], 1: [], 2: [], 3: [] };
+
+  nodes.forEach((node) => {
+    const level = levelMap[node.type] ?? 1;
+    levels[level].push(node);
+  });
+
+  const positioned: { id: string; position: { x: number; y: number } }[] = [];
+
+  Object.entries(levels).forEach(([levelStr, levelNodes]) => {
+    const level = Number.parseInt(levelStr, 10);
+    const y = yPositions[level] ?? 260;
+    const totalWidth = Math.max(1, levelNodes.length) * xPadding;
+    const startX = Math.max(100, 900 - totalWidth / 2);
+
+    levelNodes.forEach((node, index) => {
+      positioned.push({
+        id: node.id,
+        position: { x: startX + index * xPadding, y }
+      });
+    });
+  });
+
+  return positioned;
 }
 
 function InnerGraphCanvas(props: {
@@ -157,6 +137,27 @@ function InnerGraphCanvas(props: {
   const nodeMap = useMemo(() => new Map(nodeRecords.map((node) => [node.id, node])), [nodeRecords]);
   const impact = useImpactAnalysis(impactMode ? selectedNodeId : null, graph.edges);
 
+  const allowedBySelectedPage = useMemo(() => {
+    if (!selectedPageId) {
+      return null;
+    }
+
+    const ids = new Set<string>([selectedPageId]);
+    let changed = true;
+
+    while (changed) {
+      changed = false;
+      for (const edge of graph.edges) {
+        if (ids.has(edge.source) && !ids.has(edge.target)) {
+          ids.add(edge.target);
+          changed = true;
+        }
+      }
+    }
+
+    return ids;
+  }, [graph.edges, selectedPageId]);
+
   const filteredRecords = useMemo(
     () =>
       nodeRecords.filter((node) => {
@@ -172,18 +173,46 @@ function InnerGraphCanvas(props: {
         if (node.type === "context" && !filters.context) {
           return false;
         }
-        if (selectedPageId && node.type === "page" && node.id !== selectedPageId) {
+        if (allowedBySelectedPage && !allowedBySelectedPage.has(node.id)) {
           return false;
         }
         return true;
       }),
-    [filters.apis, filters.components, filters.context, filters.hooks, nodeRecords, selectedPageId]
+    [allowedBySelectedPage, filters.apis, filters.components, filters.context, filters.hooks, nodeRecords]
   );
 
   const visibleIds = new Set(filteredRecords.map((node) => node.id));
   const flowNodes = useMemo(() => {
-    const nodes = getLayoutedNodes(filteredRecords, graph.edges, selectedPageId);
-    return nodes.map((node) => {
+    const layoutPositions = getLayoutedNodes(filteredRecords, graph.edges);
+
+    const allNodes: FlowNode<BaseNodeData>[] = filteredRecords.map((node) => {
+      const fields =
+        node.type === "component"
+          ? node.props.map((prop) => ({ name: prop.name, type: prop.type, required: prop.required }))
+          : node.type === "hook"
+            ? node.params.map((param) => ({ name: param.name, type: param.type }))
+            : node.type === "context"
+              ? node.properties
+              : [];
+
+      const pos = layoutPositions.find((position) => position.id === node.id);
+      return {
+        id: node.id,
+        type: node.type,
+        position: pos?.position ?? { x: 100, y: 100 },
+        data: {
+          label: getNodeLabel(node),
+          filePath: getNodeFilePath(node),
+          kindLabel: node.type.toUpperCase(),
+          color: colors[node.type],
+          borderStyle: node.type === "context" ? "dashed" : "solid",
+          isShared: node.type === "component" ? node.isShared : false,
+          fields
+        }
+      };
+    });
+
+    return allNodes.map((node) => {
       const isFocused = selectedNodeId === node.id;
       const isAffected = impact.affected.includes(node.id) || impact.indirect.includes(node.id);
       return {
@@ -198,43 +227,53 @@ function InnerGraphCanvas(props: {
         }
       };
     });
-  }, [filteredRecords, graph.edges, impact.affected, impact.indirect, impactMode, selectedNodeId, selectedPageId]);
+  }, [filteredRecords, graph.edges, impact.affected, impact.indirect, impactMode, selectedNodeId]);
 
-  const flowEdges = useMemo<FlowEdge[]>(
-    () =>
-      graph.edges
-        .filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target))
-        .map((edge) => {
-          const source = nodeMap.get(edge.source);
-          const target = nodeMap.get(edge.target);
-          const style = edgeStyleFor(source, target);
-          const propSummary = edge.props?.map((prop) => `${prop.name}: ${prop.type}`).join(", ") ?? "None";
-          return {
-            id: edge.id,
-            source: edge.source,
-            target: edge.target,
-            type: "smoothstep",
-            animated: false,
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-              color: style.style?.stroke as string | undefined
-            },
-            ...style,
-            data: {
-              tooltip: `${edge.relationshipType} | Props: ${propSummary}`
-            }
-          };
-        }),
-    [graph.edges, nodeMap, visibleIds]
-  );
+  const flowEdges = useMemo<FlowEdge[]>(() => {
+    console.log("[ReactGraph] edges:", graph.edges.length, graph.edges);
+
+    return graph.edges
+      .filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target))
+      .map((edge) => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        type: "smoothstep",
+        animated: false,
+        style: {
+          stroke: getEdgeColor(edge.relationshipType),
+          strokeWidth: 2.5
+        },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color: getEdgeColor(edge.relationshipType),
+          width: 20,
+          height: 20
+        },
+        label: edge.props?.length
+          ? edge.props
+              .slice(0, 2)
+              .map((prop) => `${prop.name}: ${prop.type}`)
+              .join(", ")
+          : undefined,
+        labelStyle: { fontSize: 10, fill: "#8b949e" },
+        labelBgStyle: { fill: "#1c2333" },
+        data: {
+          tooltip: `${edge.relationshipType} | ${
+            nodeMap.get(edge.source) ? getNodeLabel(nodeMap.get(edge.source) as GraphNodeRecord) : edge.source
+          } -> ${nodeMap.get(edge.target) ? getNodeLabel(nodeMap.get(edge.target) as GraphNodeRecord) : edge.target}`
+        }
+      }));
+  }, [graph.edges, nodeMap, visibleIds]);
 
   return (
     <div className="graph-shell">
       <ReactFlow
         edges={flowEdges}
         fitView
+        fitViewOptions={{ padding: 0.18, maxZoom: 1.05 }}
         maxZoom={2}
-        minZoom={0.4}
+        minZoom={0.3}
         nodeTypes={nodeTypes}
         nodes={flowNodes}
         onEdgeMouseEnter={(_, edge) => {

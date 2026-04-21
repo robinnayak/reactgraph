@@ -33,16 +33,17 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "prebuild": "node scripts/clean-dist.js",
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --platform=node --target=node18 --format=cjs",
+    "postbuild": "node scripts/copy-ui.js",
     "dev": "tsc -p tsconfig.json --watch",
-    "package": "npx @vscode/vsce package --no-dependencies"
-  },
-  "dependencies": {
-    "@reactgraph/core": "*"
+    "package": "npm run build && npx @vscode/vsce package --no-dependencies"
   },
   "devDependencies": {
-    "@vscode/vsce": "^3.0.0",
+    "@reactgraph/ui": "^0.1.0",
     "@types/vscode": "^1.105.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.25.12",
     "typescript": "^5.9.2"
   }
 }
