@@ -76,10 +76,10 @@ npm run package
 Extensions: Install from VSIX...
 ```
 
-4. Choose:
+4. Choose the generated VSIX file from `packages/vscode`, for example:
 
 ```txt
-packages/vscode/reactgraph-vscode-0.1.1.vsix
+packages/vscode/reactgraph-vscode-0.1.2.vsix
 ```
 
 5. Open your React or Next.js project in VS Code.
