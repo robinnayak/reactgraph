@@ -1,6 +1,10 @@
 {
   "name": "reactgraph",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/robinnayak/reactgraph"
+  },
   "packageManager": "npm@11.9.0",
   "workspaces": [
     "packages/*"

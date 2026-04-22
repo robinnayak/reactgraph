@@ -1,12 +1,36 @@
 {
-  "name": "@reactgraph/core",
+  "name": "@robinnayak/reactgraph-core",
   "version": "0.1.0",
+  "description": "Visualize your React/Next.js project as an interactive hierarchy graph. Maps Pages -> Components -> Hooks -> APIs with props, types, and connections.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "bin": {
     "reactgraph": "bin/reactgraph"
   },
+  "keywords": [
+    "react",
+    "nextjs",
+    "visualization",
+    "graph",
+    "components",
+    "hooks",
+    "developer-tools",
+    "ast",
+    "typescript"
+  ],
+  "author": "Robin Nayak",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/robinnayak/reactgraph"
+  },
+  "homepage": "https://github.com/robinnayak/reactgraph#readme",
   "publishConfig": {
     "access": "public"
   },

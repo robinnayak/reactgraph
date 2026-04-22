@@ -21,7 +21,7 @@ import type {
 declare global {
   interface Window {
     __REACTGRAPH_HEALTH__?: HealthCheckResults | null;
-    __REACTGRAPH_VSCODE__?: {
+    vscodeApi?: {
       postMessage: (message: unknown) => void;
     };
   }
@@ -58,7 +58,7 @@ function normalizePath(filePath: string): string {
 }
 
 function postToExtension(message: unknown): void {
-  window.__REACTGRAPH_VSCODE__?.postMessage(message);
+  window.vscodeApi?.postMessage(message);
 }
 
 function EmptyState(props: { message: string; helper: string }) {
@@ -74,7 +74,7 @@ function EmptyState(props: { message: string; helper: string }) {
         height: "100vh",
         background: "#0d1117",
         color: "#8b949e",
-        fontFamily: "Inter, system-ui, sans-serif",
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
         gap: "16px"
       }}
     >
@@ -287,12 +287,7 @@ export default function App() {
   }, [graph.pages, impact.affected, impact.indirect, impactMode, nodeMap, selectedNode]);
 
   const openInIde = (filePath: string) => {
-    if (window.__REACTGRAPH_VSCODE__) {
-      postToExtension({ type: "openFile", filePath });
-      return;
-    }
-
-    window.location.href = `vscode://file/${filePath}`;
+    postToExtension({ type: "openFile", filePath });
   };
 
   const handleRunHealthCheck = () => {
@@ -343,7 +338,7 @@ export default function App() {
 
       <main className="workspace">
         <Toolbar
-          canRunHealthCheck={Boolean(window.__REACTGRAPH_VSCODE__)}
+          canRunHealthCheck={Boolean(window.vscodeApi)}
           filters={filters}
           flow={flow}
           healthHasResults={Boolean(healthResults)}

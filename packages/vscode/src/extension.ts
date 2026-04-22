@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { fork, type ChildProcess } from "node:child_process";
 import * as vscode from "vscode";
-import type { GraphData } from "@reactgraph/core";
+import type { GraphData } from "@robinnayak/reactgraph-core";
 
 interface HealthIssue {
   filePath: string;
@@ -26,10 +27,12 @@ interface HealthCheckResults {
 let currentPanel: vscode.WebviewPanel | undefined;
 let healthCheckProcess: ChildProcess | undefined;
 let lastHealthCheckResults: HealthCheckResults | null = null;
+let currentWorkspaceRoot: string | undefined;
 const output = vscode.window.createOutputChannel("ReactGraph");
+const initializedPanels = new WeakSet<vscode.WebviewPanel>();
 
-function loadAnalyze(): typeof import("@reactgraph/core").analyze {
-  const { analyze } = require("@reactgraph/core") as typeof import("@reactgraph/core");
+function loadAnalyze(): typeof import("@robinnayak/reactgraph-core").analyze {
+  const { analyze } = require("@robinnayak/reactgraph-core") as typeof import("@robinnayak/reactgraph-core");
   return analyze;
 }
 
@@ -71,17 +74,17 @@ function readExistingGraphData(workspaceRoot: string): GraphData | null {
   }
 }
 
-function injectGraphData(html: string, graphData: GraphData, healthResults: HealthCheckResults | null): string {
+function injectGraphData(
+  html: string,
+  graphData: GraphData,
+  healthResults: HealthCheckResults | null,
+  nonce: string
+): string {
   const bridge = `
-    <script>
-      const vscode = acquireVsCodeApi();
+    <script nonce="${nonce}">
+      window.vscodeApi = acquireVsCodeApi();
       window.__REACTGRAPH_DATA__ = ${JSON.stringify(graphData)};
       window.__REACTGRAPH_HEALTH__ = ${JSON.stringify(healthResults)};
-      window.__REACTGRAPH_VSCODE__ = {
-        postMessage(message) {
-          vscode.postMessage(message);
-        }
-      };
     </script>
   `;
   return html.replace("</head>", `${bridge}</head>`);
@@ -171,6 +174,7 @@ async function buildHtml(
 ): Promise<string> {
   const webviewDistUri = getWebviewDistUri(context);
   const htmlPath = vscode.Uri.joinPath(webviewDistUri, "index.html");
+  const nonce = randomUUID().replace(/-/g, "");
   let html = fs.readFileSync(htmlPath.fsPath, "utf8");
 
   html = html.replace(
@@ -181,7 +185,56 @@ async function buildHtml(
     }
   );
 
-  return injectGraphData(html, graphData, lastHealthCheckResults);
+  html = html.replace(/<script\b/g, `<script nonce="${nonce}"`);
+
+  const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}' ${panel.webview.cspSource} vscode-resource:; style-src 'unsafe-inline' ${panel.webview.cspSource} vscode-resource:; img-src ${panel.webview.cspSource} vscode-resource: data:;">`;
+  html = html.replace("</head>", `${csp}</head>`);
+
+  return injectGraphData(html, graphData, lastHealthCheckResults, nonce);
+}
+
+function attachPanelListeners(context: vscode.ExtensionContext, panel: vscode.WebviewPanel): void {
+  if (initializedPanels.has(panel)) {
+    return;
+  }
+
+  panel.onDidDispose(() => {
+    stopHealthCheck();
+    currentPanel = undefined;
+    currentWorkspaceRoot = undefined;
+  });
+
+  panel.webview.onDidReceiveMessage(async (message) => {
+    const workspaceRoot = currentWorkspaceRoot;
+    if (!workspaceRoot) {
+      return;
+    }
+
+    if (message?.type === "openFile" && typeof message.filePath === "string") {
+      const fullPath = path.isAbsolute(message.filePath)
+        ? message.filePath
+        : path.join(workspaceRoot, message.filePath);
+      const doc = await vscode.workspace.openTextDocument(fullPath);
+      await vscode.window.showTextDocument(doc);
+      return;
+    }
+
+    if (message?.type === "startHealthCheck") {
+      startHealthCheck(context, panel, workspaceRoot);
+      return;
+    }
+
+    if (message?.type === "cancelHealthCheck") {
+      stopHealthCheck(panel);
+      return;
+    }
+
+    if (message?.type === "clearHealthCheck") {
+      lastHealthCheckResults = null;
+    }
+  });
+
+  initializedPanels.add(panel);
 }
 
 async function renderPanel(
@@ -213,6 +266,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     try {
+      currentWorkspaceRoot = workspaceRoot;
       currentPanel =
         currentPanel ??
         vscode.window.createWebviewPanel("reactgraph", "ReactGraph", vscode.ViewColumn.Beside, {
@@ -220,35 +274,7 @@ export function activate(context: vscode.ExtensionContext): void {
           retainContextWhenHidden: true
         });
 
-      currentPanel.onDidDispose(() => {
-        stopHealthCheck();
-        currentPanel = undefined;
-      });
-
-      currentPanel.webview.onDidReceiveMessage(async (message) => {
-        if (message?.type === "openFile" && typeof message.filePath === "string") {
-          const fullPath = path.isAbsolute(message.filePath)
-            ? message.filePath
-            : path.join(workspaceRoot, message.filePath);
-          const doc = await vscode.workspace.openTextDocument(fullPath);
-          await vscode.window.showTextDocument(doc);
-          return;
-        }
-
-        if (message?.type === "startHealthCheck") {
-          startHealthCheck(context, currentPanel!, workspaceRoot);
-          return;
-        }
-
-        if (message?.type === "cancelHealthCheck") {
-          stopHealthCheck(currentPanel);
-          return;
-        }
-
-        if (message?.type === "clearHealthCheck") {
-          lastHealthCheckResults = null;
-        }
-      });
+      attachPanelListeners(context, currentPanel);
 
       await renderPanel(context, currentPanel, workspaceRoot);
       currentPanel.reveal(vscode.ViewColumn.Beside);
@@ -276,4 +302,5 @@ export function activate(context: vscode.ExtensionContext): void {
 export function deactivate(): void {
   stopHealthCheck();
   currentPanel = undefined;
+  currentWorkspaceRoot = undefined;
 }

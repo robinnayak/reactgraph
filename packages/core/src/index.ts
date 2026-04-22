@@ -4,6 +4,7 @@ export { findComponents } from "./analyzer/findComponents.js";
 export { findHooks } from "./analyzer/findHooks.js";
 export { findApis } from "./analyzer/findApis.js";
 export { buildEdges } from "./analyzer/buildEdges.js";
+export type { AnalyzeOptions } from "./analyzer/analyze.js";
 export type {
   GraphData,
   PageNode,
@@ -13,5 +14,8 @@ export type {
   Edge,
   Prop,
   Param,
-  ReturnValue
+  ReturnValue,
+  ComponentMeta,
+  HookMeta,
+  ParsedModule
 } from "./types.js";

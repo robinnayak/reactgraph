@@ -7,13 +7,13 @@ ReactGraph maps Pages -> Components -> Hooks -> APIs with props, types, and rela
 
 This monorepo has three parts:
 
-- `@reactgraph/core`: the analyzer library and CLI
+- `@robinnayak/reactgraph-core`: the analyzer library and CLI
 - `packages/ui`: the browser UI built with React and React Flow
 - `packages/vscode`: the VS Code extension that bundles the analyzer and UI into a webview
 
 This distinction matters:
 
-- `@reactgraph/core` gives you graph data
+- `@robinnayak/reactgraph-core` gives you graph data
 - the browser viewer and VS Code extension give you the visual UI
 
 ## Quick Start: VS Code Extension
@@ -63,7 +63,7 @@ Use this when you want analysis output in the terminal from your current project
 Install the package directly from npm in your project:
 
 ```bash
-npm install @reactgraph/core
+npm install @robinnayak/reactgraph-core
 ```
 
 Then run the analyzer with the installed CLI binary:
@@ -75,7 +75,7 @@ npx reactgraph analyze .
 Or programmatically:
 
 ```js
-import { analyze } from "@reactgraph/core";
+import { analyze } from "@robinnayak/reactgraph-core";
 
 const graph = await analyze(".");
 console.log(graph.pages.length);
@@ -100,13 +100,13 @@ Use this when you want to add ReactGraph to a project as a normal dependency ins
 1. Install the package:
 
 ```bash
-npm install @reactgraph/core
+npm install @robinnayak/reactgraph-core
 ```
 
 2. Create a small script such as `analyze.mjs` in your project root:
 
 ```js
-import { analyze } from "@reactgraph/core";
+import { analyze } from "@robinnayak/reactgraph-core";
 
 const graph = await analyze(".");
 
@@ -133,12 +133,12 @@ This gives you the analyzer and CLI only. It does not include the visual UI by i
 
 ## Quick Start: Visual Graph From Your Current Project Terminal
 
-If you install `@reactgraph/core`, you can also view the graph outside VS Code directly from the project you want to analyze.
+If you install `@robinnayak/reactgraph-core`, you can also view the graph outside VS Code directly from the project you want to analyze.
 
 1. Install the package in your project:
 
 ```bash
-npm install @reactgraph/core
+npm install @robinnayak/reactgraph-core
 ```
 
 2. From that same project directory, either open the browser automatically:
@@ -177,13 +177,13 @@ npm link
 
 ```powershell
 cd C:\path\to\your\ecommerce-project
-npm link @reactgraph/core
+npm link @robinnayak/reactgraph-core
 ```
 
 ### Step 3 - Create a small analysis script
 
 ```js
-import { analyze } from "@reactgraph/core";
+import { analyze } from "@robinnayak/reactgraph-core";
 
 const graph = await analyze(".");
 
@@ -241,16 +241,16 @@ http://127.0.0.1:4174
 
 This command:
 
-- analyzes the target project with `@reactgraph/core`
+- analyzes the target project with `@robinnayak/reactgraph-core`
 - serves the built UI from `packages/ui/dist`
 - exposes the graph data at `/reactgraph.json`
 
-## Why the command to run is `reactgraph`, not `@reactgraph/core`
+## Why the command to run is `reactgraph`, not `@robinnayak/reactgraph-core`
 
-`@reactgraph/core` is the npm package name.
+`@robinnayak/reactgraph-core` is the npm package name.
 `reactgraph` is the CLI binary name it installs into your project.
 
-So after `npm install @reactgraph/core` or `npm link @reactgraph/core`, use:
+So after `npm install @robinnayak/reactgraph-core` or `npm link @robinnayak/reactgraph-core`, use:
 
 ```bash
 npx reactgraph analyze .
@@ -258,16 +258,9 @@ npx reactgraph serve .
 npx reactgraph view .
 ```
 
-Not:
-
-```bash
-npx @reactgraph/core analyze .
-npx @reactgraph/core view .
-```
-
 ## Why the local monorepo browser viewer still exists
 
-`npm link @reactgraph/core` links the analyzer package and CLI into another project.
+`npm link @robinnayak/reactgraph-core` links the analyzer package and CLI into another project.
 
 That package exports:
 
@@ -283,7 +276,7 @@ It does not include:
 
 So this is expected:
 
-- `npm link @reactgraph/core` works for scripts, terminal analysis, and the installed `reactgraph` CLI
+- `npm link @robinnayak/reactgraph-core` works for scripts, terminal analysis, and the installed `reactgraph` CLI
 - the `.vsix` shows the full UI inside VS Code
 - `npm run view -- "<project>"` shows the UI in your browser from the monorepo
 
@@ -303,13 +296,13 @@ npm link
 
 ```bash
 cd C:\path\to\your\project
-npm link @reactgraph/core
+npm link @robinnayak/reactgraph-core
 ```
 
 3. Create a small script such as `analyze.mjs`:
 
 ```js
-import { analyze } from "@reactgraph/core";
+import { analyze } from "@robinnayak/reactgraph-core";
 
 const graph = await analyze(".");
 
@@ -336,7 +329,7 @@ npm run view -- "C:\path\to\your\project"
 When finished, unlink with:
 
 ```bash
-npm unlink @reactgraph/core
+npm unlink @robinnayak/reactgraph-core
 ```
 
 ## Development
@@ -349,7 +342,7 @@ Requirements:
 Setup:
 
 ```bash
-git clone https://github.com/yourusername/reactgraph.git
+git clone https://github.com/robinnayak/reactgraph.git
 cd reactgraph
 npm install
 npm run build
@@ -388,7 +381,7 @@ npm run view -- "C:\path\to\project"
 
 ```txt
 Project source files
-  -> @reactgraph/core analyzes the codebase
+  -> @robinnayak/reactgraph-core analyzes the codebase
   -> GraphData is produced in memory and optionally written as reactgraph.json
   -> packages/ui renders the graph
   -> packages/vscode hosts that UI inside a VS Code webview
@@ -408,7 +401,7 @@ Only the CLI or programmatic analyzer writes `reactgraph.json`. Otherwise ReactG
 ReactGraph currently focuses on project-defined hooks and relationships in your codebase, not every framework hook imported from React or Next.js.
 
 **Can I use this outside VS Code?**
-Yes. Either install `@reactgraph/core` in your project and run:
+Yes. Either install `@robinnayak/reactgraph-core` in your project and run:
 
 ```bash
 npx reactgraph view .

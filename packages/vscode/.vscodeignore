@@ -1,10 +1,4 @@
-node_modules/**
-src/**
-scripts/**
-.turbo/**
-tsconfig.json
-*.map
-*.ts
+**
 !dist/**
 !assets/icon.png
 !LICENSE

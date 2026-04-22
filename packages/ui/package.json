@@ -2,6 +2,10 @@
   "name": "@reactgraph/ui",
   "version": "0.1.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/robinnayak/reactgraph"
+  },
   "type": "module",
   "scripts": {
     "build": "vite build",
@@ -9,7 +13,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@reactgraph/core": "*",
+    "@robinnayak/reactgraph-core": "*",
     "@tailwindcss/typography": "^0.5.16",
     "lucide-react": "^0.542.0",
     "react": "^19.1.1",

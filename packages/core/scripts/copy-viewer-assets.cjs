@@ -9,6 +9,11 @@ if (!fs.existsSync(uiDist)) {
   process.exit(0);
 }
 
+fs.rmSync(coreViewerDist, { recursive: true, force: true });
 fs.mkdirSync(coreViewerDist, { recursive: true });
 fs.cpSync(uiDist, coreViewerDist, { recursive: true, force: true });
+const copiedJson = path.join(coreViewerDist, "reactgraph.json");
+if (fs.existsSync(copiedJson)) {
+  fs.rmSync(copiedJson);
+}
 console.log("ReactGraph core: copied viewer assets into dist/viewer");

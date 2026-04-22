@@ -29,7 +29,7 @@ function getContentType(filePath: string): string {
 function ensureViewerAssets(): void {
   if (!fs.existsSync(viewerDistDir)) {
     throw new Error(
-      "Viewer assets were not found in @reactgraph/core. Rebuild or reinstall the package so dist/viewer is included."
+      "Viewer assets were not found in @robinnayak/reactgraph-core. Rebuild or reinstall the package so dist/viewer is included."
     );
   }
 }
