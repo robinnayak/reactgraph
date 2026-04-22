@@ -19,6 +19,12 @@ export default function Sidebar({
 }: SidebarProps) {
   const components = nodes.filter((node) => node.type === "component");
   const hooks = nodes.filter((node) => node.type === "hook");
+  const ellipsisStyle = {
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    maxWidth: "100%"
+  } as const;
 
   return (
     <aside className="sidebar">
@@ -49,7 +55,9 @@ export default function Sidebar({
                 type="button"
               >
                 <span className="dot dot-page" />
-                <span>{page.filePath}</span>
+                <span style={ellipsisStyle} title={page.filePath}>
+                  {page.filePath}
+                </span>
               </button>
             ))}
           </div>
@@ -60,7 +68,9 @@ export default function Sidebar({
             {components.slice(0, 8).map((component) => (
               <div className="sidebar__item sidebar__item--static" key={component.id}>
                 <span className="dot dot-component" />
-                <span>{component.name}</span>
+                <span style={ellipsisStyle} title={component.name}>
+                  {component.name}
+                </span>
               </div>
             ))}
           </div>
@@ -71,7 +81,9 @@ export default function Sidebar({
             {hooks.slice(0, 6).map((hook) => (
               <div className="sidebar__item sidebar__item--static" key={hook.id}>
                 <span className="dot dot-hook" />
-                <span>{hook.name}</span>
+                <span style={ellipsisStyle} title={hook.name}>
+                  {hook.name}
+                </span>
               </div>
             ))}
           </div>

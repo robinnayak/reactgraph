@@ -8,7 +8,7 @@ export type {
   Param,
   Prop,
   ReturnValue
-} from "@robinnayak/reactgraph-core";
+} from "@reactgraph-ui/core";
 
 export interface ContextGraphNode {
   id: string;
@@ -19,10 +19,10 @@ export interface ContextGraphNode {
 }
 
 export type GraphNodeRecord =
-  | import("@robinnayak/reactgraph-core").PageNode
-  | import("@robinnayak/reactgraph-core").ComponentNode
-  | import("@robinnayak/reactgraph-core").HookNode
-  | import("@robinnayak/reactgraph-core").ApiNode
+  | import("@reactgraph-ui/core").PageNode
+  | import("@reactgraph-ui/core").ComponentNode
+  | import("@reactgraph-ui/core").HookNode
+  | import("@reactgraph-ui/core").ApiNode
   | ContextGraphNode;
 
 export interface ImpactResult {

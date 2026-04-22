@@ -130,6 +130,7 @@ input {
   padding: 0.7rem 0.8rem;
   border-radius: 0.8rem;
   cursor: pointer;
+  min-width: 0;
 }
 
 .sidebar__item:hover,
@@ -141,6 +142,11 @@ input {
 
 .sidebar__item--static {
   cursor: default;
+}
+
+.sidebar__item > span:last-child {
+  flex: 1;
+  min-width: 0;
 }
 
 .dot {
@@ -306,12 +312,14 @@ input {
   margin-top: 0.25rem;
   font-size: 0.88rem;
   font-weight: 700;
+  min-width: 0;
 }
 
 .graph-node__path {
   margin-top: 0.35rem;
   color: var(--text-muted);
   font-size: 0.68rem;
+  max-width: 100%;
 }
 
 .graph-node__badge {
@@ -361,10 +369,11 @@ input {
   display: flex;
   gap: 0.45rem;
   align-items: center;
+  min-width: 0;
 }
 
-.graph-node__field-name { color: var(--prop-name); }
-.graph-node__field-type { color: var(--prop-type); }
+.graph-node__field-name { color: var(--prop-name); flex: 1 1 auto; min-width: 0; }
+.graph-node__field-type { color: var(--prop-type); flex: 1 1 auto; min-width: 0; }
 .graph-node__field-required { color: var(--prop-required); margin-left: auto; }
 .graph-node__field-more { color: var(--text-muted); }
 
@@ -513,12 +522,14 @@ input {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  min-width: 0;
 }
 
 .summary-panel__item code,
 .summary-panel__issue code {
   color: #93c5fd;
   font-size: 0.72rem;
+  display: block;
 }
 
 .summary-panel__issue-row {
@@ -526,6 +537,7 @@ input {
   align-items: center;
   gap: 0.55rem;
   margin-bottom: 0.45rem;
+  min-width: 0;
 }
 
 .summary-panel__issue p {
@@ -647,6 +659,7 @@ input {
   margin-top: 0.25rem;
   color: var(--text-muted);
   font-size: 0.75rem;
+  max-width: 100%;
 }
 
 .inspector__metrics {

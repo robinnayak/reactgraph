@@ -31,6 +31,12 @@ function pluralize(label: string, count: number): string {
 function IssueList(props: { issues: HealthDisplayIssue[] }) {
   const { issues } = props;
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const ellipsisStyle = {
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    maxWidth: "100%"
+  } as const;
 
   return (
     <div className="summary-panel__issues">
@@ -38,7 +44,12 @@ function IssueList(props: { issues: HealthDisplayIssue[] }) {
         <div className="summary-panel__issue" key={issue.id}>
           <div className="summary-panel__issue-row">
             <span className={`summary-panel__pill summary-panel__pill--${issue.severity}`}>{issue.severity}</span>
-            <code>{issue.fileCount === 1 ? issue.filePaths[0] : `${issue.fileCount} files affected`}</code>
+            <code
+              style={ellipsisStyle}
+              title={issue.fileCount === 1 ? issue.filePaths[0] : issue.filePaths.join("\n")}
+            >
+              {issue.fileCount === 1 ? issue.filePaths[0] : `${issue.fileCount} files affected`}
+            </code>
           </div>
           <p>{issue.message}</p>
           {issue.kind === "deduplicated" ? (
@@ -56,7 +67,9 @@ function IssueList(props: { issues: HealthDisplayIssue[] }) {
               {expanded[issue.id] ? (
                 <div className="summary-panel__file-list">
                   {issue.filePaths.map((filePath) => (
-                    <code key={filePath}>{filePath}</code>
+                    <code key={filePath} style={ellipsisStyle} title={filePath}>
+                      {filePath}
+                    </code>
                   ))}
                 </div>
               ) : null}
@@ -70,6 +83,12 @@ function IssueList(props: { issues: HealthDisplayIssue[] }) {
 
 function NodeList(props: { emptyLabel: string; nodes: GraphNodeRecord[] }) {
   const { emptyLabel, nodes } = props;
+  const ellipsisStyle = {
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    maxWidth: "100%"
+  } as const;
 
   if (nodes.length === 0) {
     return <div className="summary-panel__empty">{emptyLabel}</div>;
@@ -79,8 +98,14 @@ function NodeList(props: { emptyLabel: string; nodes: GraphNodeRecord[] }) {
     <div className="summary-panel__list">
       {nodes.map((node) => (
         <div className="summary-panel__item" key={node.id}>
-          <span>{node.name}</span>
-          {"filePath" in node ? <code>{node.filePath}</code> : null}
+          <span style={ellipsisStyle} title={node.name}>
+            {node.name}
+          </span>
+          {"filePath" in node ? (
+            <code style={ellipsisStyle} title={node.filePath}>
+              {node.filePath}
+            </code>
+          ) : null}
         </div>
       ))}
     </div>

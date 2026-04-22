@@ -3,7 +3,7 @@
   "publisher": "reactgraph",
   "displayName": "ReactGraph",
   "description": "Visualize your React/Next.js component hierarchy, hooks, and API connections",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "main": "dist/extension.js",
   "icon": "assets/icon.png",
@@ -52,7 +52,7 @@
     "package": "npm run build && npx @vscode/vsce package --no-dependencies"
   },
   "devDependencies": {
-    "@reactgraph/ui": "^0.1.0",
+    "@reactgraph-ui/core": "^0.1.2",
     "@types/vscode": "^1.105.0",
     "@vscode/vsce": "^3.0.0",
     "esbuild": "^0.25.12",

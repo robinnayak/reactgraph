@@ -1,5 +1,5 @@
 {
-  "name": "@reactgraph/ui",
+  "name": "@reactgraph/webview",
   "version": "0.1.0",
   "private": true,
   "repository": {
@@ -13,7 +13,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@robinnayak/reactgraph-core": "*",
+    "@reactgraph-ui/core": "*",
     "@tailwindcss/typography": "^0.5.16",
     "lucide-react": "^0.542.0",
     "react": "^19.1.1",

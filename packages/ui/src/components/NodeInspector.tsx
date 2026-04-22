@@ -83,13 +83,23 @@ export default function NodeInspector({
   const props = "props" in node ? node.props : [];
   const params = "params" in node ? node.params : [];
   const returns = "returns" in node ? node.returns : [];
+  const ellipsisStyle = {
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    maxWidth: "100%"
+  } as const;
 
   return (
     <aside className="inspector">
       <div className="inspector__header">
         <div>
-          <div className="inspector__title">{node.name}</div>
-          <div className="inspector__path">{node.filePath}</div>
+          <div className="inspector__title" style={ellipsisStyle} title={node.name}>
+            {node.name}
+          </div>
+          <div className="inspector__path" style={ellipsisStyle} title={node.filePath}>
+            {node.filePath}
+          </div>
         </div>
         <button onClick={onClose} type="button">Close</button>
       </div>
@@ -163,8 +173,8 @@ export default function NodeInspector({
             <tbody>
               {props.map((prop) => (
                 <tr key={`${prop.name}:${prop.type}`}>
-                  <td>{prop.name}</td>
-                  <td className="type-cell">{prop.type}</td>
+                  <td title={prop.name}>{prop.name}</td>
+                  <td className="type-cell" title={prop.type}>{prop.type}</td>
                   <td>{prop.required ? "Yes" : "No"}</td>
                 </tr>
               ))}

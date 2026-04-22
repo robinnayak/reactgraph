@@ -3,7 +3,7 @@
   "compilerOptions": {
     "noEmit": true,
     "paths": {
-      "@robinnayak/reactgraph-core": [
+      "@reactgraph-ui/core": [
         "../core/dist/index.d.ts"
       ]
     }

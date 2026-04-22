@@ -23,6 +23,12 @@ export function NodeCard({ data }: NodeProps<BaseNodeData>) {
   const issueLabel = data.issueBadge
     ? `${data.issueBadge.errorCount + data.issueBadge.warningCount} issue${data.issueBadge.errorCount + data.issueBadge.warningCount === 1 ? "" : "s"}`
     : "";
+  const ellipsisStyle = {
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    maxWidth: "100%"
+  } as const;
 
   return (
     <div
@@ -39,7 +45,9 @@ export function NodeCard({ data }: NodeProps<BaseNodeData>) {
             <div className="graph-node__kind" style={{ color: data.color }}>
               {data.kindLabel}
             </div>
-            <div className="graph-node__title">{data.label}</div>
+            <div className="graph-node__title" style={ellipsisStyle} title={data.label}>
+              {data.label}
+            </div>
           </div>
           <div className="graph-node__meta">
             {data.issueBadge ? (
@@ -54,7 +62,9 @@ export function NodeCard({ data }: NodeProps<BaseNodeData>) {
             {data.isShared ? <span className="graph-node__badge">SHARED</span> : null}
           </div>
         </div>
-        <div className="graph-node__path">{data.filePath}</div>
+        <div className="graph-node__path" style={ellipsisStyle} title={data.filePath}>
+          {data.filePath}
+        </div>
         {fields.length > 0 ? (
           <div
             className="graph-node__fields"
@@ -64,18 +74,20 @@ export function NodeCard({ data }: NodeProps<BaseNodeData>) {
               <div
                 className="graph-node__field"
                 key={`${field.name}:${field.type}`}
+                title={`${field.name}: ${field.type}${field.required === false ? "?" : " req"}`}
                 style={{ fontSize: 10, fontFamily: "monospace", lineHeight: "1.6" }}
               >
-                <span className="graph-node__field-name" style={{ color: "#79c0ff" }}>
+                <span className="graph-node__field-name" style={ellipsisStyle} title={field.name}>
                   {field.name}
                 </span>
                 <span style={{ color: "#8b949e" }}>: </span>
-                <span className="graph-node__field-type" style={{ color: "#ffa657" }}>
+                <span className="graph-node__field-type" style={ellipsisStyle} title={field.type}>
                   {field.type}
                 </span>
                 <span
                   className="graph-node__field-required"
                   style={{ color: field.required === false ? "#8b949e" : "#3fb950", marginLeft: 4 }}
+                  title={field.required === false ? "Optional" : "Required"}
                 >
                   {field.required === false ? "?" : "req"}
                 </span>

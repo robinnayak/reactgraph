@@ -3,7 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { fork, type ChildProcess } from "node:child_process";
 import * as vscode from "vscode";
-import type { GraphData } from "@robinnayak/reactgraph-core";
+import type { GraphData } from "@reactgraph-ui/core";
 
 interface HealthIssue {
   filePath: string;
@@ -31,8 +31,8 @@ let currentWorkspaceRoot: string | undefined;
 const output = vscode.window.createOutputChannel("ReactGraph");
 const initializedPanels = new WeakSet<vscode.WebviewPanel>();
 
-function loadAnalyze(): typeof import("@robinnayak/reactgraph-core").analyze {
-  const { analyze } = require("@robinnayak/reactgraph-core") as typeof import("@robinnayak/reactgraph-core");
+function loadAnalyze(): typeof import("@reactgraph-ui/core").analyze {
+  const { analyze } = require("@reactgraph-ui/core") as typeof import("@reactgraph-ui/core");
   return analyze;
 }
 

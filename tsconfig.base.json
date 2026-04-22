@@ -16,7 +16,7 @@
     ],
     "baseUrl": ".",
     "paths": {
-      "@robinnayak/reactgraph-core": [
+      "@reactgraph-ui/core": [
         "packages/core/src/index.ts"
       ]
     }
