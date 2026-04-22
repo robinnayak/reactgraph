@@ -4,10 +4,49 @@ import * as vscode from "vscode";
 import type { GraphData } from "@reactgraph/core";
 
 let currentPanel: vscode.WebviewPanel | undefined;
+const output = vscode.window.createOutputChannel("ReactGraph");
 
 function loadAnalyze(): typeof import("@reactgraph/core").analyze {
   const { analyze } = require("@reactgraph/core") as typeof import("@reactgraph/core");
   return analyze;
+}
+
+function isGraphData(value: unknown): value is GraphData {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return ["pages", "components", "hooks", "apis", "edges"].every((key) => Array.isArray(candidate[key]));
+}
+
+function hasGraphContent(graphData: GraphData): boolean {
+  return (
+    graphData.pages.length > 0 ||
+    graphData.components.length > 0 ||
+    graphData.hooks.length > 0 ||
+    graphData.apis.length > 0 ||
+    graphData.edges.length > 0
+  );
+}
+
+function summarizeGraph(graphData: GraphData): string {
+  return `${graphData.pages.length} pages, ${graphData.components.length} components, ${graphData.hooks.length} hooks, ${graphData.apis.length} apis, ${graphData.edges.length} edges`;
+}
+
+function readExistingGraphData(workspaceRoot: string): GraphData | null {
+  const jsonPath = path.join(workspaceRoot, "reactgraph.json");
+  if (!fs.existsSync(jsonPath)) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(fs.readFileSync(jsonPath, "utf8")) as unknown;
+    return isGraphData(parsed) ? parsed : null;
+  } catch (error) {
+    output.appendLine(`Failed to read existing reactgraph.json: ${(error as Error).message}`);
+    return null;
+  }
 }
 
 function injectGraphData(html: string, graphData: GraphData): string {
@@ -55,7 +94,17 @@ async function renderPanel(
   workspaceRoot: string
 ): Promise<void> {
   const analyze = loadAnalyze();
-  const graphData = await analyze(workspaceRoot);
+  const existingGraphData = readExistingGraphData(workspaceRoot);
+  output.appendLine(`Analyzing workspace: ${workspaceRoot}`);
+
+  let graphData = await analyze(workspaceRoot, { writeJson: false });
+  output.appendLine(`Extension analysis result: ${summarizeGraph(graphData)}`);
+
+  if (!hasGraphContent(graphData) && existingGraphData && hasGraphContent(existingGraphData)) {
+    output.appendLine("Extension analysis returned an empty graph. Falling back to existing reactgraph.json.");
+    graphData = existingGraphData;
+  }
+
   panel.webview.html = await buildHtml(context, panel, graphData);
 }
 

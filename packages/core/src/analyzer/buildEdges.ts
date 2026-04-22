@@ -83,7 +83,7 @@ function getTargetComponentFromJsx(
 }
 
 function propsFromJsx(openingElement: TSESTree.JSXOpeningElement, source: string): Prop[] {
-  return openingElement.attributes.flatMap((attribute) => {
+  return (openingElement.attributes ?? []).flatMap((attribute) => {
     if (attribute.type !== "JSXAttribute" || attribute.name.type !== "JSXIdentifier") {
       return [];
     }

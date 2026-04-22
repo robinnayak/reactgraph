@@ -17,7 +17,7 @@ export const DEFAULT_IGNORES = [
 ];
 
 export function resolveProjectFiles(projectRoot: string, patterns: string[]): string[] {
-  return patterns.flatMap((pattern) =>
+  return (patterns ?? []).flatMap((pattern) =>
     globSync(pattern, {
       cwd: projectRoot,
       absolute: true,
@@ -83,7 +83,7 @@ export function collectDeclaredNames(node: TSESTree.Node): string[] {
     return [node.id.name];
   }
   if (node.type === "VariableDeclaration") {
-    return node.declarations.flatMap((declaration) =>
+    return (node.declarations ?? []).flatMap((declaration) =>
       declaration.id.type === "Identifier" ? [declaration.id.name] : []
     );
   }
@@ -182,7 +182,7 @@ export function inferTypeFromExpression(node: TSESTree.Expression | null | undef
 }
 
 export function extractParams(params: TSESTree.Parameter[], source: string): Param[] {
-  return params.flatMap((param) => {
+  return (params ?? []).flatMap((param) => {
     if (param.type === "Identifier") {
       return [
         {
@@ -283,7 +283,7 @@ export function getTypeMembers(
 }
 
 export function extractPropsFromMembers(members: TSESTree.TypeElement[], source: string): Prop[] {
-  return members.flatMap((member) => {
+  return (members ?? []).flatMap((member) => {
     if (member.type !== "TSPropertySignature" || member.key.type !== "Identifier") {
       return [];
     }

@@ -7,7 +7,11 @@ import { findComponents } from "./findComponents.js";
 import { findHooks } from "./findHooks.js";
 import { findPages } from "./findPages.js";
 
-export async function analyze(projectRoot: string): Promise<GraphData> {
+export interface AnalyzeOptions {
+  writeJson?: boolean;
+}
+
+export async function analyze(projectRoot: string, options: AnalyzeOptions = {}): Promise<GraphData> {
   const root = path.resolve(projectRoot);
   const pages = findPages(root);
   const components = findComponents(root);
@@ -16,6 +20,8 @@ export async function analyze(projectRoot: string): Promise<GraphData> {
   const edges = buildEdges(pages, components, hooks, apis, root);
 
   const graph: GraphData = { pages, components, hooks, apis, edges };
-  await fs.writeFile(path.join(root, "reactgraph.json"), JSON.stringify(graph, null, 2), "utf8");
+  if (options.writeJson !== false) {
+    await fs.writeFile(path.join(root, "reactgraph.json"), JSON.stringify(graph, null, 2), "utf8");
+  }
   return graph;
 }

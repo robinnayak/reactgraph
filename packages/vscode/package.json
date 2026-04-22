@@ -9,7 +9,7 @@
   "icon": "assets/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/reactgraph"
+    "url": "https://github.com/robinnayak/reactgraph"
   },
   "engines": {
     "vscode": "^1.105.0"
@@ -34,7 +34,7 @@
   },
   "scripts": {
     "prebuild": "node scripts/clean-dist.js",
-    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --external:fsevents --external:@typescript-eslint/visitor-keys --platform=node --target=node18 --format=cjs --minify --tree-shaking=true --legal-comments=none",
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --external:fsevents --platform=node --target=node18 --format=cjs --minify --tree-shaking=true --legal-comments=none",
     "postbuild": "node scripts/copy-ui.js",
     "dev": "tsc -p tsconfig.json --watch",
     "package": "npm run build && npx @vscode/vsce package --no-dependencies"
