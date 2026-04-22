@@ -126,7 +126,11 @@ export function findComponents(projectRoot: string): ComponentNode[] {
           type: "component",
           props,
           isShared: false,
-          usedInPages: []
+          usedInPages: [],
+          usageCount: 0,
+          shouldMoveToShared: false,
+          isUnused: true,
+          unusedReason: "Not referenced by any page or component tree"
         });
       };
 

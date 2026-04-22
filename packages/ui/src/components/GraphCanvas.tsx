@@ -122,7 +122,9 @@ function InnerGraphCanvas(props: {
   graph: GraphData;
   selectedPageId: string | null;
   selectedNodeId: string | null;
+  focusNodeId: string | null;
   onSelectNode: (nodeId: string | null) => void;
+  onFocusComplete: () => void;
   filters: FilterState;
   impactMode: boolean;
   impactResult: ImpactResult;
@@ -134,7 +136,9 @@ function InnerGraphCanvas(props: {
     graph,
     selectedPageId,
     selectedNodeId,
+    focusNodeId,
     onSelectNode,
+    onFocusComplete,
     filters,
     impactMode,
     impactResult,
@@ -252,6 +256,9 @@ function InnerGraphCanvas(props: {
           color: colors[node.type],
           borderStyle: node.type === "context" ? "dashed" : "solid",
           isShared: node.type === "component" ? node.isShared : false,
+          shouldMoveToShared: node.type === "component" ? node.shouldMoveToShared : false,
+          isUnused: node.type === "component" ? node.isUnused : false,
+          usageCount: node.type === "component" ? node.usageCount : 0,
           fields,
           emphasis,
           issueBadge:
@@ -322,6 +329,24 @@ function InnerGraphCanvas(props: {
       });
   }, [activeImpactIds, graph.edges, impactMode, nodeMap, selectedNodeId, visibleIds]);
 
+  useEffect(() => {
+    if (!focusNodeId) {
+      return;
+    }
+
+    const targetNode = flowNodes.find((node) => node.id === focusNodeId);
+    if (!targetNode) {
+      return;
+    }
+
+    reactFlow.setCenter(
+      targetNode.position.x + (targetNode.width ?? 180) / 2,
+      targetNode.position.y + (targetNode.height ?? 80) / 2,
+      { zoom: 1.2, duration: 600 }
+    );
+    onFocusComplete();
+  }, [focusNodeId, flowNodes, onFocusComplete, reactFlow]);
+
   return (
     <div className="graph-shell">
       <ReactFlow
@@ -360,7 +385,9 @@ export default function GraphCanvas(props: {
   graph: GraphData;
   selectedPageId: string | null;
   selectedNodeId: string | null;
+  focusNodeId: string | null;
   onSelectNode: (nodeId: string | null) => void;
+  onFocusComplete: () => void;
   filters: FilterState;
   impactMode: boolean;
   impactResult: ImpactResult;

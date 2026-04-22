@@ -1,3 +1,4 @@
+import { FolderTree } from "lucide-react";
 import type { ReactFlowInstance } from "reactflow";
 import type { FilterState } from "../types";
 
@@ -12,7 +13,11 @@ interface ToolbarProps {
   healthLoading: boolean;
   healthHasResults: boolean;
   canRunHealthCheck: boolean;
+  canCopyFileTree: boolean;
   flow: ReactFlowInstance | null;
+  fileTreeButtonLabel: string;
+  fileTreeError: string | null;
+  onCopyFileTree: () => void;
 }
 
 function exportSvg(): void {
@@ -40,7 +45,11 @@ export default function Toolbar({
   healthLoading,
   healthHasResults,
   canRunHealthCheck,
-  flow
+  canCopyFileTree,
+  flow,
+  fileTreeButtonLabel,
+  fileTreeError,
+  onCopyFileTree
 }: ToolbarProps) {
   const zoomPercent = flow ? `${Math.round(flow.getZoom() * 100)}%` : "100%";
 
@@ -100,6 +109,13 @@ export default function Toolbar({
         <button onClick={exportSvg} type="button">
           Export SVG
         </button>
+        <div className="toolbar__file-tree">
+          <button disabled={!canCopyFileTree} onClick={onCopyFileTree} type="button">
+            <FolderTree size={16} strokeWidth={2} />
+            <span>{fileTreeButtonLabel}</span>
+          </button>
+          {fileTreeError ? <span className="toolbar__error">{fileTreeError}</span> : null}
+        </div>
       </div>
     </div>
   );

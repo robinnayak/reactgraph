@@ -36,6 +36,11 @@ function loadAnalyze(): typeof import("@reactgraph-ui/core").analyze {
   return analyze;
 }
 
+function loadGenerateFileTree(): typeof import("@reactgraph-ui/core").generateFileTree {
+  const { generateFileTree } = require("@reactgraph-ui/core") as typeof import("@reactgraph-ui/core");
+  return generateFileTree;
+}
+
 function isGraphData(value: unknown): value is GraphData {
   if (!value || typeof value !== "object") {
     return false;
@@ -231,6 +236,19 @@ function attachPanelListeners(context: vscode.ExtensionContext, panel: vscode.We
 
     if (message?.type === "clearHealthCheck") {
       lastHealthCheckResults = null;
+      return;
+    }
+
+    if (message?.type === "generateFileTree") {
+      try {
+        const generateFileTree = loadGenerateFileTree();
+        const tree = await generateFileTree(workspaceRoot);
+        await panel.webview.postMessage({ type: "fileTreeResult", tree });
+      } catch (error) {
+        const errorMessage = (error as Error).message;
+        output.appendLine(`Failed to generate file tree: ${errorMessage}`);
+        await panel.webview.postMessage({ type: "fileTreeError", error: errorMessage });
+      }
     }
   });
 

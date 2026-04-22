@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { analyze, findApis, findComponents, findHooks, findPages } from "../src/index.js";
+import { analyze, findApis, findComponents, findHooks, findPages, generateFileTree } from "../src/index.js";
 
 const tempDirs: string[] = [];
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
@@ -186,5 +186,113 @@ describe("core analyzer", () => {
         })
       ])
     );
+  });
+
+  it("marks a component used by two pages as shared with usage count", async () => {
+    const root = makeProject({
+      "pages/home.tsx": `
+        import { SharedWidget } from "../components/SharedWidget";
+        export default function HomePage() {
+          return <SharedWidget />;
+        }
+      `,
+      "pages/about.tsx": `
+        import { SharedWidget } from "../components/SharedWidget";
+        export default function AboutPage() {
+          return <SharedWidget />;
+        }
+      `,
+      "components/SharedWidget.tsx": `
+        export function SharedWidget() {
+          return <div>Shared</div>;
+        }
+      `
+    });
+
+    const graph = await analyze(root, { writeJson: false });
+    const component = graph.components.find((entry) => entry.name === "SharedWidget");
+
+    expect(component).toMatchObject({
+      isShared: true,
+      usageCount: 2,
+      shouldMoveToShared: true,
+      isUnused: false
+    });
+    expect(component?.usedInPages).toHaveLength(2);
+  });
+
+  it("marks an unreferenced component as unused", async () => {
+    const root = makeProject({
+      "pages/index.tsx": `
+        export default function HomePage() {
+          return <main>Home</main>;
+        }
+      `,
+      "components/UnusedWidget.tsx": `
+        export function UnusedWidget() {
+          return <aside>Unused</aside>;
+        }
+      `
+    });
+
+    const graph = await analyze(root, { writeJson: false });
+    const component = graph.components.find((entry) => entry.name === "UnusedWidget");
+
+    expect(component).toMatchObject({
+      usageCount: 0,
+      isUnused: true,
+      unusedReason: "Not referenced by any page or component tree",
+      shouldMoveToShared: false
+    });
+    expect(component?.usedInPages).toEqual([]);
+  });
+
+  it("generates a sorted file tree with exclusions and empty folders", async () => {
+    const root = makeProject({
+      "src/components/Button.tsx": "export const Button = () => null;",
+      "src/components/forms/Field.tsx": "export const Field = () => null;",
+      "src/utils/api.ts": "export const api = {};",
+      "src/index.ts": "export * from './components/Button';",
+      "empty/.gitkeep": "",
+      ".env.example": "EXAMPLE=true",
+      "package.json": "{\"name\":\"tree-test\"}",
+      "archive.tgz": "skip me",
+      "extension.vsix": "skip me",
+      "node_modules/pkg/index.js": "skip me",
+      "dist/output.js": "skip me"
+    });
+
+    const tree = await generateFileTree(root);
+    const projectName = path.basename(root);
+
+    expect(tree).toBe(
+      [
+        `${projectName}/`,
+        "├── empty/",
+        "│   └── .gitkeep",
+        "├── src/",
+        "│   ├── components/",
+        "│   │   ├── forms/",
+        "│   │   │   └── Field.tsx",
+        "│   │   └── Button.tsx",
+        "│   ├── utils/",
+        "│   │   └── api.ts",
+        "│   └── index.ts",
+        "├── .env.example",
+        "└── package.json"
+      ].join("\n")
+    );
+  });
+
+  it("caps file tree recursion at six levels", async () => {
+    const root = makeProject({
+      "one/two/three/four/five/six/seven/deep.ts": "export const deep = true;"
+    });
+
+    const tree = await generateFileTree(root);
+
+    expect(tree).toContain("└── six/");
+    expect(tree).not.toContain("seven/");
+    expect(tree).not.toContain("deep.ts");
   });
 });

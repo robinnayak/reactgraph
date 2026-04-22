@@ -1,336 +1,306 @@
 # ReactGraph
 
-Visualize your React or Next.js project as an interactive hierarchy graph.
-ReactGraph maps Pages -> Components -> Hooks -> APIs with props, types, and relationships.
+ReactGraph helps you understand a React or Next.js codebase as a graph.
+It analyzes your project and maps:
 
-## What ReactGraph includes
+`Pages -> Components -> Hooks -> APIs`
 
-This monorepo has three parts:
+You can use it in three ways:
 
-- `@reactgraph-ui/core`: the analyzer library and CLI
-- `packages/ui`: the browser UI built with React and React Flow
-- `packages/vscode`: the VS Code extension that bundles the analyzer and UI into a webview
+- as a CLI and programmatic analyzer with `@reactgraph-ui/core`
+- as a local browser viewer
+- as a VS Code extension
 
-This distinction matters:
+## What ReactGraph Can Do
 
-- `@reactgraph-ui/core` gives you graph data
-- the browser viewer and VS Code extension give you the visual UI
+ReactGraph can:
 
-## Quick Start: VS Code Extension
+- detect pages in Next.js App Router and Pages Router projects
+- discover components, custom hooks, and API calls
+- build relationships between pages, components, hooks, and APIs
+- show which components are shared across multiple pages
+- flag components that likely belong in `components/shared`
+- flag components that appear unused
+- inspect props, params, return types, and file paths
+- visualize the graph interactively with zoom, pan, and fit view
+- run impact analysis to show what changes may affect
+- run a TypeScript-focused health check in the VS Code extension
+- copy a formatted project file tree from the graph UI
+- open files from the VS Code extension webview
 
-This is the easiest way to use ReactGraph.
+## Package Overview
+
+This monorepo contains:
+
+- `packages/core`
+  `@reactgraph-ui/core`, the analyzer library, CLI, and packaged browser viewer assets
+- `packages/ui`
+  the React webview and browser UI
+- `packages/vscode`
+  the VS Code extension that hosts the UI inside a webview
+
+## Feature Matrix
+
+| Feature | `@reactgraph-ui/core` CLI | Browser viewer | VS Code extension |
+| --- | --- | --- | --- |
+| Analyze project structure | Yes | Yes | Yes |
+| Programmatic API | Yes | No | No |
+| Interactive graph UI | No | Yes | Yes |
+| `serve` / `view` commands | Yes | Yes | No |
+| Impact Analysis | No | Yes | Yes |
+| Copy File Tree | No | Yes | Yes |
+| Export SVG | No | Yes | Yes |
+| Open in IDE | No | No | Yes |
+| Health Check | No | No | Yes |
+
+## Quick Start
+
+### Option 1: VS Code Extension
+
+Use this when you want the richest workflow inside VS Code.
 
 1. Build and package the extension:
 
 ```bash
+npm install
 npm run build -- --force
 cd packages/vscode
 npm run package
 ```
 
-2. Open VS Code.
+2. In VS Code, open the Command Palette with `Ctrl+Shift+P`.
 
-3. Press `Ctrl+Shift+P` to open the Command Palette.
-
-4. Run:
+3. Run:
 
 ```txt
 Extensions: Install from VSIX...
 ```
 
-5. In the file picker, locate the generated VSIX in the ReactGraph repo:
+4. Choose:
 
 ```txt
-packages/vscode/reactgraph-vscode-0.1.0.vsix
+packages/vscode/reactgraph-vscode-0.1.1.vsix
 ```
 
-Select that file and install it.
+5. Open your React or Next.js project in VS Code.
 
-6. Open your React or Next.js project in VS Code.
-
-7. Press `Ctrl+Shift+P` again and run:
+6. Run:
 
 ```txt
 ReactGraph: Open Graph
 ```
 
-The graph opens in a side panel inside VS Code.
+The extension includes:
 
-## Quick Start: CLI
+- the interactive graph viewer
+- node inspection
+- impact analysis
+- health check
+- copy file tree
+- export SVG
+- open file in editor
 
-Use this when you want analysis output in the terminal from your current project directory.
+### Option 2: CLI in Any Project
 
-Install the package directly from npm in your project:
+Use this when you want analysis output or the browser viewer from a project terminal.
+
+Install the package:
 
 ```bash
 npm install @reactgraph-ui/core
 ```
 
-Then run the analyzer with the installed CLI binary:
+Run analysis:
 
 ```bash
 npx reactgraph analyze .
 ```
 
-Or programmatically:
+Start the browser viewer without auto-opening:
 
-```js
-import { analyze } from "@reactgraph-ui/core";
-
-const graph = await analyze(".");
-console.log(graph.pages.length);
-console.log(graph.components.length);
-console.log(graph.hooks.length);
-console.log(graph.apis.length);
-console.log(graph.edges.length);
+```bash
+npx reactgraph serve .
 ```
 
-This mode is analysis only. It does not open the UI by itself.
+Or open the browser automatically:
 
-The analyzer writes `reactgraph.json` to your project root, so add this to your app's `.gitignore`:
+```bash
+npx reactgraph view .
+```
+
+By default the viewer runs at:
+
+```txt
+http://127.0.0.1:4174
+```
+
+### Option 3: Monorepo Browser Viewer
+
+Use this when you are developing ReactGraph itself and want to test the browser UI against another local project.
+
+From the repo root:
+
+```bash
+npm install
+npm run build -- --force
+npm run view -- "C:\path\to\your\project"
+```
+
+This uses the built analyzer and browser UI from the monorepo and serves the graph locally.
+
+## CLI Commands
+
+After installing or linking `@reactgraph-ui/core`, the command to run is `reactgraph`.
+
+```bash
+npx reactgraph analyze .
+npx reactgraph serve .
+npx reactgraph view .
+```
+
+Supported commands:
+
+- `reactgraph analyze [path]`
+  analyze the project and write `reactgraph.json`
+- `reactgraph serve [path]`
+  start the browser viewer server
+- `reactgraph view [path]`
+  start the browser viewer and try to open it automatically
+
+The browser viewer supports:
+
+- interactive graph navigation
+- impact analysis
+- export SVG
+- copy file tree
+
+## Programmatic API
+
+You can use the analyzer directly in scripts or automation.
+
+```ts
+import { analyze, generateFileTree } from "@reactgraph-ui/core";
+
+const graph = await analyze(".");
+const tree = await generateFileTree(".");
+
+console.log(graph.pages.length);
+console.log(tree);
+```
+
+Common exports:
+
+- `analyze(projectRoot)`
+- `generateFileTree(projectRoot)`
+- graph-related TypeScript types such as `GraphData`
+
+## File Tree Export
+
+ReactGraph can generate a clean text representation of the project structure.
+
+It:
+
+- excludes common noise such as `node_modules`, `.git`, `.next`, `dist`, `build`, and archive artifacts
+- keeps folders before files
+- sorts alphabetically within each group
+- limits recursion depth to keep output readable
+
+Example:
+
+```txt
+my-app/
+├── app/
+│   ├── dashboard/
+│   │   └── page.tsx
+│   ├── products/
+│   │   └── page.tsx
+│   ├── layout.tsx
+│   └── page.tsx
+├── components/
+│   ├── shared/
+│   │   └── AdminShell.tsx
+│   └── ui/
+│       └── Button.tsx
+├── package.json
+└── tsconfig.json
+```
+
+Where it works:
+
+- browser viewer
+- VS Code extension
+- programmatic API with `generateFileTree()`
+
+## Local Testing Without Publishing to npm
+
+Use this when you want another local project to consume your in-progress `packages/core` package.
+
+### Link the local package
+
+From the ReactGraph repo:
+
+```powershell
+cd "C:\Users\robin\OneDrive\Desktop\React graph\packages\core"
+npm run build
+npm link
+```
+
+From the target project:
+
+```powershell
+cd "C:\path\to\your\project"
+npm link @reactgraph-ui/core
+```
+
+### Run the linked CLI
+
+```powershell
+npx reactgraph analyze .
+npx reactgraph serve .
+npx reactgraph view .
+```
+
+### When You Need to Rebuild
+
+If you changed only analyzer logic in `packages/core/src`, rebuild `packages/core`:
+
+```powershell
+cd "C:\Users\robin\OneDrive\Desktop\React graph\packages\core"
+npm run build
+```
+
+If you changed the UI or anything that affects the browser viewer or VS Code webview, rebuild from the repo root:
+
+```powershell
+cd "C:\Users\robin\OneDrive\Desktop\React graph"
+npm run build -- --force
+```
+
+In most cases you do not need to unlink and link again after every change. Rebuilding is enough as long as the symlink is still active.
+
+## Output and Project Files
+
+The analyzer writes `reactgraph.json` to the target project root when using `analyze()`.
+
+Add this to your app's `.gitignore`:
 
 ```gitignore
 reactgraph.json
 ```
 
-## Quick Start: Install From npm
-
-Use this when you want to add ReactGraph to a project as a normal dependency instead of using `npm link`.
-
-1. Install the package:
-
-```bash
-npm install @reactgraph-ui/core
-```
-
-2. Create a small script such as `analyze.mjs` in your project root:
-
-```js
-import { analyze } from "@reactgraph-ui/core";
-
-const graph = await analyze(".");
-
-console.log("Pages found:", graph.pages.length);
-console.log("Components found:", graph.components.length);
-console.log("Hooks found:", graph.hooks.length);
-console.log("APIs found:", graph.apis.length);
-console.log("Edges found:", graph.edges.length);
-```
-
-3. Run it:
-
-```bash
-node analyze.mjs
-```
-
-You can also use the installed package directly from your current project terminal without writing a script:
-
-```bash
-npx reactgraph analyze .
-```
-
-This gives you the analyzer and CLI only. It does not include the visual UI by itself.
-
-## Quick Start: Visual Graph From Your Current Project Terminal
-
-If you install `@reactgraph-ui/core`, you can also view the graph outside VS Code directly from the project you want to analyze.
-
-1. Install the package in your project:
-
-```bash
-npm install @reactgraph-ui/core
-```
-
-2. From that same project directory, either open the browser automatically:
-
-```bash
-npx reactgraph view .
-```
-
-Or start the local viewer server without auto-opening the browser:
-
-```bash
-npx reactgraph serve .
-```
-
-3. If you use `serve`, open:
+The browser viewer serves graph data at:
 
 ```txt
-http://127.0.0.1:4174
+/reactgraph.json
 ```
 
-This means users do not need to navigate back to the ReactGraph monorepo just to see the UI.
-
-## Quick Start: Test Locally Without Publishing to npm
-
-Use this when you want to test the npm package locally without uploading anything to npm.
-
-### Step 1 - Link the package globally from the ReactGraph monorepo
-
-```powershell
-cd C:\Users\robin\OneDrive\Desktop\React graph\packages\core
-npm run build
-npm link
-```
-
-### Step 2 - Link it into your other project
-
-```powershell
-cd C:\path\to\your\ecommerce-project
-npm link @reactgraph-ui/core
-```
-
-### Step 3 - Create a small analysis script
-
-```js
-import { analyze } from "@reactgraph-ui/core";
-
-const graph = await analyze(".");
-
-console.log("Pages found:", graph.pages.length);
-console.log("Components found:", graph.components.length);
-console.log("Hooks found:", graph.hooks.length);
-console.log("APIs found:", graph.apis.length);
-console.log("Edges found:", graph.edges.length);
-```
-
-### Step 4 - Run it
-
-```bash
-node analyze.mjs
-```
-
-You can also use the linked CLI directly from that project:
-
-```bash
-npx reactgraph analyze .
-npx reactgraph serve .
-npx reactgraph view .
-```
-
-This uses the package exactly like a published npm install, but everything stays local on your machine.
-
-## Quick Start: Local Browser Viewer
-
-Use this when you want the ReactGraph UI in your browser without installing the VS Code extension and without installing the npm package into another project.
-
-1. Build the repo from the monorepo root:
-
-```bash
-npm install
-npm run build -- --force
-```
-
-2. Start the local viewer for your target project:
-
-```bash
-npm run view -- "C:\path\to\your\project"
-```
-
-Example:
-
-```bash
-npm run view -- "C:\Users\robin\OneDrive\Desktop\ecommerse"
-```
-
-3. Open the printed local URL in your browser:
+It also exposes:
 
 ```txt
-http://127.0.0.1:4174
+/file-tree
 ```
 
-This command:
-
-- analyzes the target project with `@reactgraph-ui/core`
-- serves the built UI from `packages/ui/dist`
-- exposes the graph data at `/reactgraph.json`
-
-## Why the command to run is `reactgraph`, not `@reactgraph-ui/core`
-
-`@reactgraph-ui/core` is the npm package name.
-`reactgraph` is the CLI binary name it installs into your project.
-
-So after `npm install @reactgraph-ui/core` or `npm link @reactgraph-ui/core`, use:
-
-```bash
-npx reactgraph analyze .
-npx reactgraph serve .
-npx reactgraph view .
-```
-
-## Why the local monorepo browser viewer still exists
-
-`npm link @reactgraph-ui/core` links the analyzer package and CLI into another project.
-
-That package exports:
-
-- the `analyze()` API
-- the CLI command
-- graph data types
-
-It does not include:
-
-- the browser UI host
-- the VS Code webview host
-- automatic rendering in a browser window
-
-So this is expected:
-
-- `npm link @reactgraph-ui/core` works for scripts, terminal analysis, and the installed `reactgraph` CLI
-- the `.vsix` shows the full UI inside VS Code
-- `npm run view -- "<project>"` shows the UI in your browser from the monorepo
-
-## Testing locally without publishing to npm
-
-If you want to test the analyzer package inside another project before publishing:
-
-1. Link the package globally:
-
-```bash
-cd packages/core
-npm run build
-npm link
-```
-
-2. Link it into your other project:
-
-```bash
-cd C:\path\to\your\project
-npm link @reactgraph-ui/core
-```
-
-3. Create a small script such as `analyze.mjs`:
-
-```js
-import { analyze } from "@reactgraph-ui/core";
-
-const graph = await analyze(".");
-
-console.log("Pages found:", graph.pages.length);
-console.log("Components found:", graph.components.length);
-console.log("Hooks found:", graph.hooks.length);
-console.log("APIs found:", graph.apis.length);
-console.log("Edges found:", graph.edges.length);
-```
-
-4. Run it:
-
-```bash
-node analyze.mjs
-```
-
-If you also want the visual UI while testing locally, run the browser viewer from the ReactGraph repo root:
-
-```bash
-npm run build -- --force
-npm run view -- "C:\path\to\your\project"
-```
-
-When finished, unlink with:
-
-```bash
-npm unlink @reactgraph-ui/core
-```
+for browser-based file tree copying.
 
 ## Development
 
@@ -345,76 +315,91 @@ Setup:
 git clone https://github.com/robinnayak/reactgraph.git
 cd reactgraph
 npm install
-npm run build
+npm run build -- --force
 npm test
+```
+
+Useful commands:
+
+```bash
+# Build all packages
+npm run build -- --force
+
+# Run tests
+npm test
+
+# Analyze a target project through the built CLI
+npm run analyze -- analyze "C:\path\to\project"
+
+# Open the monorepo browser viewer for a target project
+npm run view -- "C:\path\to\project"
 ```
 
 Project structure:
 
 ```txt
 reactgraph/
-  packages/
-    core/     analyzer and CLI
-    ui/       browser graph viewer
-    vscode/   VS Code extension
-  scripts/
-    view-graph.mjs
-```
-
-Useful commands:
-
-```bash
-# Build everything
-npm run build -- --force
-
-# Run tests
-npm test
-
-# Analyze a project through the built CLI
-npm run analyze -- analyze "C:\path\to\project"
-
-# Open the browser viewer for a project
-npm run view -- "C:\path\to\project"
+├── packages/
+│   ├── core/
+│   ├── ui/
+│   └── vscode/
+└── scripts/
+    └── view-graph.mjs
 ```
 
 ## Architecture
 
+At a high level:
+
 ```txt
 Project source files
   -> @reactgraph-ui/core analyzes the codebase
-  -> GraphData is produced in memory and optionally written as reactgraph.json
-  -> packages/ui renders the graph
-  -> packages/vscode hosts that UI inside a VS Code webview
+  -> GraphData is created in memory
+  -> analyze() can write reactgraph.json
+  -> the browser viewer or VS Code extension renders the graph
 ```
 
-- No backend
-- No database
-- No internet required
-- No changes required to the target React app
+ReactGraph:
+
+- does not require a backend
+- does not require a database
+- does not require internet access
+- does not modify app source files beyond generating `reactgraph.json`
 
 ## FAQ
 
-**Does ReactGraph modify my project files?**
-Only the CLI or programmatic analyzer writes `reactgraph.json`. Otherwise ReactGraph reads your files and builds the graph in memory.
+### Does ReactGraph only work with Next.js?
 
-**Why are built-in hooks like `useState` not listed as hook nodes?**
-ReactGraph currently focuses on project-defined hooks and relationships in your codebase, not every framework hook imported from React or Next.js.
+No. It works best with React and Next.js TypeScript codebases, including:
 
-**Can I use this outside VS Code?**
-Yes. Either install `@reactgraph-ui/core` in your project and run:
+- Next.js App Router
+- Next.js Pages Router
+- Vite + React
+- other TypeScript React projects
+
+### Why are built-in React hooks not shown as hook nodes?
+
+ReactGraph focuses on project-defined hooks and relationships in your codebase, not every framework hook import.
+
+### Why does the browser viewer sometimes need a full repo rebuild?
+
+Because the packaged viewer assets are copied from `packages/ui/dist` into `packages/core/dist/viewer`. If the UI changed, the built viewer needs to be regenerated.
+
+### What is the difference between `serve` and `view`?
+
+- `serve` starts the local viewer and prints the URL
+- `view` starts the local viewer and also tries to open your browser automatically
+
+### What is the difference between the package name and the CLI name?
+
+- npm package: `@reactgraph-ui/core`
+- CLI command: `reactgraph`
+
+So after install or link, run:
 
 ```bash
-npx reactgraph view .
+npx reactgraph analyze .
 ```
-
-Or use the monorepo browser viewer with:
-
-```bash
-npm run view -- "C:\path\to\project"
-```
-
-**Can I use this in automation or CI?**
-Yes. Use `analyze()` or the CLI and consume the resulting `GraphData` or `reactgraph.json`.
 
 ## License
 

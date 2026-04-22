@@ -8,6 +8,9 @@ export interface BaseNodeData {
   color: string;
   borderStyle?: "solid" | "dashed";
   isShared?: boolean;
+  shouldMoveToShared?: boolean;
+  isUnused?: boolean;
+  usageCount?: number;
   fields?: Array<{ name: string; type: string; required?: boolean }>;
   emphasis?: "normal" | "selected" | "direct" | "indirect" | "dimmed";
   issueBadge?: {
@@ -20,6 +23,7 @@ export interface BaseNodeData {
 export function NodeCard({ data }: NodeProps<BaseNodeData>) {
   const fields = data.fields ?? [];
   const emphasisClass = data.emphasis ? `graph-node--${data.emphasis}` : "graph-node--normal";
+  const unusedClass = data.isUnused ? " graph-node--unused" : "";
   const issueLabel = data.issueBadge
     ? `${data.issueBadge.errorCount + data.issueBadge.warningCount} issue${data.issueBadge.errorCount + data.issueBadge.warningCount === 1 ? "" : "s"}`
     : "";
@@ -29,10 +33,17 @@ export function NodeCard({ data }: NodeProps<BaseNodeData>) {
     textOverflow: "ellipsis",
     maxWidth: "100%"
   } as const;
+  const badge = data.isUnused
+    ? { label: "UNUSED", className: "graph-node__badge graph-node__badge--unused" }
+    : data.shouldMoveToShared
+      ? { label: "MOVE TO SHARED", className: "graph-node__badge graph-node__badge--move" }
+      : data.isShared
+        ? { label: "SHARED", className: "graph-node__badge" }
+      : null;
 
   return (
     <div
-      className={`graph-node ${emphasisClass}`}
+      className={`graph-node ${emphasisClass}${unusedClass}`}
       style={{
         borderStyle: data.borderStyle ?? "solid",
         boxShadow: `0 0 20px color-mix(in srgb, ${data.color} 10%, transparent)`
@@ -59,12 +70,15 @@ export function NodeCard({ data }: NodeProps<BaseNodeData>) {
                 {data.issueBadge.errorCount > 0 ? data.issueBadge.errorCount : data.issueBadge.warningCount}
               </span>
             ) : null}
-            {data.isShared ? <span className="graph-node__badge">SHARED</span> : null}
+            {badge ? <span className={badge.className}>{badge.label}</span> : null}
           </div>
         </div>
         <div className="graph-node__path" style={ellipsisStyle} title={data.filePath}>
           {data.filePath}
         </div>
+        {data.usageCount && data.usageCount > 0 ? (
+          <div className="graph-node__usage">Used in {data.usageCount} {data.usageCount === 1 ? "page" : "pages"}</div>
+        ) : null}
         {fields.length > 0 ? (
           <div
             className="graph-node__fields"

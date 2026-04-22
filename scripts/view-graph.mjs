@@ -2,7 +2,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { analyze } from "../packages/core/dist/index.js";
+import { analyze, generateFileTree } from "../packages/core/dist/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -54,6 +54,7 @@ export async function startViewer(targetProject, port = 4174) {
   ensureBuildArtifacts();
   const graphData = await analyze(targetProject);
   const graphJson = JSON.stringify(graphData, null, 2);
+  const fileTree = await generateFileTree(targetProject);
 
   const server = http.createServer((request, response) => {
     const urlPath = request.url?.split("?")[0] ?? "/";
@@ -61,6 +62,12 @@ export async function startViewer(targetProject, port = 4174) {
     if (urlPath === "/reactgraph.json") {
       response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       response.end(graphJson);
+      return;
+    }
+
+    if (urlPath === "/file-tree") {
+      response.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+      response.end(fileTree);
       return;
     }
 

@@ -30,6 +30,8 @@ interface EdgeSeed {
   props?: Prop[];
 }
 
+type ReachabilityMap = Map<string, Set<string>>;
+
 function buildLookup(
   pages: PageNode[],
   components: ComponentNode[],
@@ -239,6 +241,61 @@ function createEdge(seed: EdgeSeed, index: number): Edge {
   };
 }
 
+function isSharedPath(filePath: string): boolean {
+  return filePath.includes("/shared/") || filePath.includes("\\shared\\");
+}
+
+function isNextjsReservedFile(filePath: string): boolean {
+  const reserved = [
+    "layout.tsx",
+    "layout.ts",
+    "error.tsx",
+    "error.ts",
+    "loading.tsx",
+    "loading.ts",
+    "not-found.tsx",
+    "not-found.ts",
+    "template.tsx",
+    "template.ts",
+    "middleware.ts",
+    "middleware.tsx"
+  ];
+  return reserved.some((name) => filePath.endsWith(name));
+}
+
+function buildComponentUsageMap(pages: PageNode[], components: ComponentNode[], seeds: EdgeSeed[]): ReachabilityMap {
+  const usageByComponentId: ReachabilityMap = new Map(components.map((component) => [component.id, new Set<string>()]));
+  const childComponentsByParentId = new Map<string, string[]>();
+
+  for (const seed of seeds) {
+    if (seed.relationshipType !== "renders") {
+      continue;
+    }
+
+    const children = childComponentsByParentId.get(seed.source) ?? [];
+    children.push(seed.target);
+    childComponentsByParentId.set(seed.source, children);
+  }
+
+  const visit = (pageId: string, ownerId: string, visited: Set<string>) => {
+    for (const componentId of childComponentsByParentId.get(ownerId) ?? []) {
+      if (visited.has(componentId)) {
+        continue;
+      }
+
+      visited.add(componentId);
+      usageByComponentId.get(componentId)?.add(pageId);
+      visit(pageId, componentId, visited);
+    }
+  };
+
+  for (const page of pages) {
+    visit(page.id, page.id, new Set<string>());
+  }
+
+  return usageByComponentId;
+}
+
 export function buildEdges(
   pages: PageNode[],
   components: ComponentNode[],
@@ -249,7 +306,6 @@ export function buildEdges(
   const root = projectRoot ?? process.cwd();
   const lookup = buildLookup(pages, components, hooks, apis);
   const seeds: EdgeSeed[] = [];
-  const usedInPages = new Map<string, Set<string>>();
 
   for (const filePath of resolveProjectFiles(root, TS_GLOBS)) {
     const module = parseModule(filePath);
@@ -272,13 +328,6 @@ export function buildEdges(
           relationshipType: "renders",
           props: propsFromJsx(node, module.source)
         });
-
-        if (owner.type === "page") {
-          if (!usedInPages.has(component.id)) {
-            usedInPages.set(component.id, new Set());
-          }
-          usedInPages.get(component.id)?.add(owner.id);
-        }
       }
 
       if (node.type === "CallExpression" && node.callee.type === "Identifier" && isHookName(node.callee.name)) {
@@ -331,10 +380,22 @@ export function buildEdges(
     });
   }
 
+  const usageByComponentId = buildComponentUsageMap(pages, components, seeds);
+  const allPageIds = pages.map((page) => page.id);
+
   for (const component of components) {
-    const usedByPages = Array.from(usedInPages.get(component.id) ?? []);
+    const isReserved = isNextjsReservedFile(component.filePath);
+    const usedByPages = isReserved ? allPageIds : Array.from(usageByComponentId.get(component.id) ?? []);
+    const usageCount = usedByPages.length;
+    const shouldMoveToShared = usageCount >= 2 && !isSharedPath(component.filePath);
+    const isUnused = !isReserved && usageCount === 0;
+
     component.usedInPages = usedByPages;
-    component.isShared = usedByPages.length >= 2;
+    component.usageCount = usageCount;
+    component.isShared = usageCount >= 2;
+    component.shouldMoveToShared = shouldMoveToShared;
+    component.isUnused = isUnused;
+    component.unusedReason = isUnused ? "Not referenced by any page or component tree" : undefined;
   }
 
   const dedupedSeeds = dedupeBy(

@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { GraphData } from "./types.js";
 import { analyze } from "./analyzer/analyze.js";
+import { generateFileTree } from "./analyzer/generateFileTree.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -66,6 +67,7 @@ export async function startViewer(targetProject: string, port = 4174): Promise<V
   ensureViewerAssets();
   const graphData = await analyze(targetProject);
   const graphJson = JSON.stringify(graphData, null, 2);
+  const fileTree = await generateFileTree(targetProject);
 
   const server = http.createServer((request, response) => {
     const urlPath = request.url?.split("?")[0] ?? "/";
@@ -73,6 +75,12 @@ export async function startViewer(targetProject: string, port = 4174): Promise<V
     if (urlPath === "/reactgraph.json") {
       response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       response.end(graphJson);
+      return;
+    }
+
+    if (urlPath === "/file-tree") {
+      response.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+      response.end(fileTree);
       return;
     }
 

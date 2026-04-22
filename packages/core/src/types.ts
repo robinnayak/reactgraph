@@ -21,6 +21,10 @@ export interface ComponentNode {
   props: Prop[];
   isShared: boolean;
   usedInPages: string[];
+  usageCount: number;
+  shouldMoveToShared: boolean;
+  isUnused: boolean;
+  unusedReason?: string;
 }
 
 export interface HookNode {

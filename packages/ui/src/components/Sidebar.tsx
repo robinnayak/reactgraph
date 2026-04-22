@@ -1,30 +1,139 @@
-import type { GraphNodeRecord, PageNode } from "../types";
+import { useState } from "react";
+import type { ComponentNode, GraphNodeRecord, PageNode } from "../types";
 
 interface SidebarProps {
   pages: PageNode[];
   nodes: GraphNodeRecord[];
+  healthNodes: GraphNodeRecord[];
   selectedPageId: string | null;
+  selectedNodeId: string | null;
   onSelectPage: (pageId: string) => void;
+  onNodeFocus: (nodeId: string) => void;
+  onNodeSelect: (nodeId: string) => void;
   searchQuery: string;
   onSearchChange: (value: string) => void;
 }
 
-export default function Sidebar({
-  pages,
-  nodes,
-  selectedPageId,
-  onSelectPage,
-  searchQuery,
-  onSearchChange
-}: SidebarProps) {
-  const components = nodes.filter((node) => node.type === "component");
-  const hooks = nodes.filter((node) => node.type === "hook");
+interface HealthSectionConfig {
+  key: "shared" | "move" | "unused";
+  title: string;
+  colorClass: string;
+  accentClass: string;
+  items: ComponentNode[];
+  icon?: string;
+}
+
+function HealthSection(props: {
+  accentClass: string;
+  colorClass: string;
+  icon?: string;
+  isOpen: boolean;
+  items: ComponentNode[];
+  onItemClick: (nodeId: string) => void;
+  onToggle: () => void;
+  selectedNodeId: string | null;
+  title: string;
+}) {
+  const { accentClass, colorClass, icon, isOpen, items, onItemClick, onToggle, selectedNodeId, title } = props;
   const ellipsisStyle = {
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
     maxWidth: "100%"
   } as const;
+
+  return (
+    <section className="sidebar__health-section">
+      <button className="sidebar__health-header" onClick={onToggle} type="button">
+        <span className={`dot ${colorClass}`} />
+        <span>{title} ({items.length})</span>
+        <span className="sidebar__health-chevron">{isOpen ? "−" : "+"}</span>
+      </button>
+      {isOpen ? (
+        <div className="sidebar__section-list">
+          {items.map((component) => (
+            <button
+              className={`sidebar__health-item${selectedNodeId === component.id ? ` is-active ${accentClass}` : ""}`}
+              key={component.id}
+              onClick={() => onItemClick(component.id)}
+              type="button"
+            >
+              <span className={`dot ${colorClass}`} />
+              <span className="sidebar__health-content">
+                <span className="sidebar__health-row">
+                  <span className="sidebar__health-name" style={ellipsisStyle} title={component.name}>
+                    {component.name}
+                  </span>
+                  {icon ? <span className="sidebar__health-icon">{icon}</span> : null}
+                </span>
+                <span className="sidebar__health-path" style={ellipsisStyle} title={component.filePath}>
+                  {component.filePath}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+export default function Sidebar({
+  pages,
+  nodes,
+  healthNodes,
+  selectedPageId,
+  selectedNodeId,
+  onSelectPage,
+  onNodeFocus,
+  onNodeSelect,
+  searchQuery,
+  onSearchChange
+}: SidebarProps) {
+  const components = nodes.filter((node) => node.type === "component");
+  const hooks = nodes.filter((node) => node.type === "hook");
+  const healthComponents = healthNodes.filter((node): node is ComponentNode => node.type === "component");
+  const [openSections, setOpenSections] = useState({
+    shared: true,
+    move: true,
+    unused: true
+  });
+  const ellipsisStyle = {
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    maxWidth: "100%"
+  } as const;
+  const healthSections: HealthSectionConfig[] = [
+    {
+      key: "shared",
+      title: "SHARED COMPONENTS",
+      colorClass: "dot-shared",
+      accentClass: "sidebar__health-item--shared",
+      items: healthComponents.filter((component) => component.isShared && !component.shouldMoveToShared)
+    },
+    {
+      key: "move",
+      title: "MOVE TO SHARED",
+      colorClass: "dot-move",
+      accentClass: "sidebar__health-item--move",
+      items: healthComponents.filter((component) => component.shouldMoveToShared),
+      icon: "→"
+    },
+    {
+      key: "unused",
+      title: "UNUSED",
+      colorClass: "dot-unused",
+      accentClass: "sidebar__health-item--unused",
+      items: healthComponents.filter((component) => component.isUnused),
+      icon: "🗑"
+    }
+  ].filter((section) => section.items.length > 0);
+
+  const handleHealthItemClick = (nodeId: string) => {
+    onNodeFocus(nodeId);
+    onNodeSelect(nodeId);
+  };
 
   return (
     <aside className="sidebar">
@@ -99,6 +208,32 @@ export default function Sidebar({
             <div><span className="dot dot-shared" /> Shared</div>
           </div>
         </section>
+        {healthSections.length > 0 ? (
+          <div className="sidebar__health">
+            <div className="sidebar__health-divider" />
+            <div className="sidebar__health-label">Code Health</div>
+            <div className="sidebar__health-divider" />
+            {healthSections.map((section) => (
+              <HealthSection
+                accentClass={section.accentClass}
+                colorClass={section.colorClass}
+                icon={section.icon}
+                isOpen={openSections[section.key]}
+                items={section.items}
+                key={section.key}
+                onItemClick={handleHealthItemClick}
+                onToggle={() =>
+                  setOpenSections((current) => ({
+                    ...current,
+                    [section.key]: !current[section.key]
+                  }))
+                }
+                selectedNodeId={selectedNodeId}
+                title={section.title}
+              />
+            ))}
+          </div>
+        ) : null}
       </div>
     </aside>
   );

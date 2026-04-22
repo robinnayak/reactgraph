@@ -61,6 +61,32 @@ function postToExtension(message: unknown): void {
   window.vscodeApi?.postMessage(message);
 }
 
+async function requestBrowserFileTree(): Promise<string> {
+  const response = await fetch("/file-tree");
+  if (!response.ok) {
+    throw new Error(`Failed to fetch file tree: ${response.status}`);
+  }
+
+  return response.text();
+}
+
+async function copyTextWithFallback(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "absolute";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+}
+
 function EmptyState(props: { message: string; helper: string }) {
   const { message, helper } = props;
 
@@ -114,6 +140,7 @@ export default function App() {
   const { data, loading, error } = useGraphData();
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>(initialFilters);
   const [impactMode, setImpactMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -121,6 +148,11 @@ export default function App() {
   const [healthResults, setHealthResults] = useState<HealthCheckResults | null>(window.__REACTGRAPH_HEALTH__ ?? null);
   const [healthLoading, setHealthLoading] = useState(false);
   const [healthError, setHealthError] = useState<string | null>(null);
+  const [fileTreeText, setFileTreeText] = useState("");
+  const [fileTreeButtonLabel, setFileTreeButtonLabel] = useState("Copy File Tree");
+  const [fileTreeError, setFileTreeError] = useState<string | null>(null);
+  const canRunHealthCheck = Boolean(window.vscodeApi);
+  const canCopyFileTree = canRunHealthCheck || typeof window.fetch === "function";
 
   const graph = data ?? emptyGraph;
   const allNodes = useMemo<GraphNodeRecord[]>(
@@ -175,6 +207,16 @@ export default function App() {
         setHealthLoading(false);
         setHealthError(null);
         setHealthResults(message.results as HealthCheckResults);
+        return;
+      }
+
+      if (message.type === "fileTreeResult" && typeof message.tree === "string") {
+        setFileTreeText(message.tree);
+        return;
+      }
+
+      if (message.type === "fileTreeError") {
+        setFileTreeError("Copy failed — try again");
       }
     };
 
@@ -192,6 +234,34 @@ export default function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  useEffect(() => {
+    if (!fileTreeText) {
+      return;
+    }
+
+    let timeoutId: number | undefined;
+
+    const copyFileTree = async () => {
+      try {
+        await copyTextWithFallback(fileTreeText);
+        setFileTreeError(null);
+        setFileTreeButtonLabel("Copied!");
+        timeoutId = window.setTimeout(() => setFileTreeButtonLabel("Copy File Tree"), 2000);
+      } catch {
+        setFileTreeError("Copy failed — try again");
+        setFileTreeButtonLabel("Copy File Tree");
+      }
+    };
+
+    void copyFileTree();
+
+    return () => {
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [fileTreeText]);
 
   const dependencies = useMemo(
     () =>
@@ -290,6 +360,16 @@ export default function App() {
     postToExtension({ type: "openFile", filePath });
   };
 
+  const handlePageSelect = (pageId: string) => {
+    setSelectedPageId(pageId);
+    setSelectedNodeId(pageId);
+  };
+
+  const handleNodeFocus = (nodeId: string) => {
+    setSelectedPageId(null);
+    setFocusNodeId(nodeId);
+  };
+
   const handleRunHealthCheck = () => {
     setHealthError(null);
     postToExtension({ type: "startHealthCheck" });
@@ -304,6 +384,20 @@ export default function App() {
     setHealthError(null);
     setHealthResults(null);
     postToExtension({ type: "clearHealthCheck" });
+  };
+
+  const handleCopyFileTree = () => {
+    setFileTreeText("");
+    setFileTreeError(null);
+
+    if (window.vscodeApi) {
+      postToExtension({ type: "generateFileTree" });
+      return;
+    }
+
+    void requestBrowserFileTree()
+      .then((tree) => setFileTreeText(tree))
+      .catch(() => setFileTreeError("Copy failed - try again"));
   };
 
   if (loading) {
@@ -325,20 +419,24 @@ export default function App() {
   return (
     <div className="app-shell">
       <Sidebar
+        healthNodes={allNodes}
         nodes={searchedNodes}
+        onNodeFocus={handleNodeFocus}
+        onNodeSelect={(nodeId) => setSelectedNodeId(nodeId)}
         onSearchChange={setSearchQuery}
-        onSelectPage={(pageId) => {
-          setSelectedPageId(pageId);
-          setSelectedNodeId(pageId);
-        }}
+        onSelectPage={handlePageSelect}
         pages={filteredPages.length > 0 ? filteredPages : graph.pages}
         searchQuery={searchQuery}
+        selectedNodeId={selectedNodeId}
         selectedPageId={selectedPageId}
       />
 
       <main className="workspace">
         <Toolbar
-          canRunHealthCheck={Boolean(window.vscodeApi)}
+          canCopyFileTree={canCopyFileTree}
+          canRunHealthCheck={canRunHealthCheck}
+          fileTreeButtonLabel={fileTreeButtonLabel}
+          fileTreeError={fileTreeError}
           filters={filters}
           flow={flow}
           healthHasResults={Boolean(healthResults)}
@@ -346,6 +444,7 @@ export default function App() {
           impactMode={impactMode}
           onCancelHealthCheck={handleCancelHealthCheck}
           onClearHealthCheck={handleClearHealthCheck}
+          onCopyFileTree={handleCopyFileTree}
           onRunHealthCheck={handleRunHealthCheck}
           onToggleFilter={(key) => setFilters((current) => ({ ...current, [key]: !current[key] }))}
           onToggleImpact={() =>
@@ -362,10 +461,12 @@ export default function App() {
         {healthError ? <div className="state-panel state-panel--warning">{healthError}</div> : null}
 
         <GraphCanvas
+          focusNodeId={focusNodeId}
           filters={filters}
           graph={graph}
           healthIssuesByNodeId={healthIssuesByNodeId}
           impactMode={impactMode}
+          onFocusComplete={() => setFocusNodeId(null)}
           impactResult={impact}
           onFlowReady={setFlow}
           onSelectNode={setSelectedNodeId}
@@ -392,10 +493,12 @@ export default function App() {
       </main>
 
       <NodeInspector
+        allNodes={allNodes}
         dependencies={dependencies}
         edges={graph.edges}
         node={selectedNode}
         onClose={() => setSelectedNodeId(null)}
+        onPageSelect={handlePageSelect}
         onJumpToNode={setSelectedNodeId}
         onOpenInIde={openInIde}
         usedIn={usedIn}
