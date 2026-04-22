@@ -6,6 +6,12 @@ interface ToolbarProps {
   onToggleFilter: (key: keyof FilterState) => void;
   impactMode: boolean;
   onToggleImpact: () => void;
+  onRunHealthCheck: () => void;
+  onCancelHealthCheck: () => void;
+  onClearHealthCheck: () => void;
+  healthLoading: boolean;
+  healthHasResults: boolean;
+  canRunHealthCheck: boolean;
   flow: ReactFlowInstance | null;
 }
 
@@ -28,6 +34,12 @@ export default function Toolbar({
   onToggleFilter,
   impactMode,
   onToggleImpact,
+  onRunHealthCheck,
+  onCancelHealthCheck,
+  onClearHealthCheck,
+  healthLoading,
+  healthHasResults,
+  canRunHealthCheck,
   flow
 }: ToolbarProps) {
   const zoomPercent = flow ? `${Math.round(flow.getZoom() * 100)}%` : "100%";
@@ -35,10 +47,16 @@ export default function Toolbar({
   return (
     <div className="toolbar">
       <div className="toolbar__section">
-        <button onClick={() => flow?.zoomOut()} type="button">-</button>
+        <button onClick={() => flow?.zoomOut()} type="button">
+          -
+        </button>
         <span className="toolbar__zoom">{zoomPercent}</span>
-        <button onClick={() => flow?.zoomIn()} type="button">+</button>
-        <button onClick={() => flow?.fitView({ padding: 0.2 })} type="button">Fit</button>
+        <button onClick={() => flow?.zoomIn()} type="button">
+          +
+        </button>
+        <button onClick={() => flow?.fitView({ padding: 0.2 })} type="button">
+          Fit
+        </button>
       </div>
       <div className="toolbar__section">
         {([
@@ -61,7 +79,27 @@ export default function Toolbar({
         <button className={impactMode ? "is-active" : ""} onClick={onToggleImpact} type="button">
           Impact Analysis
         </button>
-        <button onClick={exportSvg} type="button">Export SVG</button>
+        <button
+          className={healthLoading || healthHasResults ? "is-active" : ""}
+          disabled={!canRunHealthCheck}
+          onClick={onRunHealthCheck}
+          type="button"
+        >
+          {healthLoading ? "Checking..." : "Health Check"}
+        </button>
+        {healthLoading ? (
+          <button className="toolbar__cancel" onClick={onCancelHealthCheck} type="button">
+            Cancel
+          </button>
+        ) : null}
+        {healthHasResults && !healthLoading ? (
+          <button onClick={onClearHealthCheck} type="button">
+            Clear
+          </button>
+        ) : null}
+        <button onClick={exportSvg} type="button">
+          Export SVG
+        </button>
       </div>
     </div>
   );

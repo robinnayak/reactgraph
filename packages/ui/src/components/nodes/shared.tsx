@@ -1,4 +1,5 @@
 import type { NodeProps } from "reactflow";
+import type { HealthSeverity } from "../../types";
 
 export interface BaseNodeData {
   label: string;
@@ -8,14 +9,24 @@ export interface BaseNodeData {
   borderStyle?: "solid" | "dashed";
   isShared?: boolean;
   fields?: Array<{ name: string; type: string; required?: boolean }>;
+  emphasis?: "normal" | "selected" | "direct" | "indirect" | "dimmed";
+  issueBadge?: {
+    severity: HealthSeverity;
+    errorCount: number;
+    warningCount: number;
+  } | null;
 }
 
 export function NodeCard({ data }: NodeProps<BaseNodeData>) {
   const fields = data.fields ?? [];
+  const emphasisClass = data.emphasis ? `graph-node--${data.emphasis}` : "graph-node--normal";
+  const issueLabel = data.issueBadge
+    ? `${data.issueBadge.errorCount + data.issueBadge.warningCount} issue${data.issueBadge.errorCount + data.issueBadge.warningCount === 1 ? "" : "s"}`
+    : "";
 
   return (
     <div
-      className="graph-node"
+      className={`graph-node ${emphasisClass}`}
       style={{
         borderStyle: data.borderStyle ?? "solid",
         boxShadow: `0 0 20px color-mix(in srgb, ${data.color} 10%, transparent)`
@@ -30,7 +41,18 @@ export function NodeCard({ data }: NodeProps<BaseNodeData>) {
             </div>
             <div className="graph-node__title">{data.label}</div>
           </div>
-          {data.isShared ? <span className="graph-node__badge">SHARED</span> : null}
+          <div className="graph-node__meta">
+            {data.issueBadge ? (
+              <span
+                aria-label={issueLabel}
+                className={`graph-node__issue graph-node__issue--${data.issueBadge.severity}`}
+                title={issueLabel}
+              >
+                {data.issueBadge.errorCount > 0 ? data.issueBadge.errorCount : data.issueBadge.warningCount}
+              </span>
+            ) : null}
+            {data.isShared ? <span className="graph-node__badge">SHARED</span> : null}
+          </div>
         </div>
         <div className="graph-node__path">{data.filePath}</div>
         {fields.length > 0 ? (

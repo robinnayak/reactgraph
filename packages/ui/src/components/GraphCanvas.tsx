@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import ReactFlow, {
   Background,
   Controls,
@@ -11,14 +11,20 @@ import ReactFlow, {
   type NodeTypes,
   type ReactFlowInstance
 } from "reactflow";
-import type { Edge as GraphEdge, GraphData, GraphNodeRecord, FilterState } from "../types";
+import type {
+  Edge as GraphEdge,
+  GraphData,
+  GraphNodeRecord,
+  FilterState,
+  HealthIssue,
+  ImpactResult
+} from "../types";
 import type { BaseNodeData } from "./nodes/shared";
 import PageNode from "./nodes/PageNode";
 import ComponentNode from "./nodes/ComponentNode";
 import HookNode from "./nodes/HookNode";
 import ApiNode from "./nodes/ApiNode";
 import ContextNode from "./nodes/ContextNode";
-import { useImpactAnalysis } from "../hooks/useImpactAnalysis";
 
 const nodeTypes: NodeTypes = {
   page: PageNode,
@@ -119,9 +125,23 @@ function InnerGraphCanvas(props: {
   onSelectNode: (nodeId: string | null) => void;
   filters: FilterState;
   impactMode: boolean;
+  impactResult: ImpactResult;
+  healthIssuesByNodeId: Map<string, HealthIssue[]>;
   onFlowReady: (flow: ReactFlowInstance) => void;
+  summaryPanel?: ReactNode;
 }) {
-  const { graph, selectedPageId, selectedNodeId, onSelectNode, filters, impactMode, onFlowReady } = props;
+  const {
+    graph,
+    selectedPageId,
+    selectedNodeId,
+    onSelectNode,
+    filters,
+    impactMode,
+    impactResult,
+    healthIssuesByNodeId,
+    onFlowReady,
+    summaryPanel
+  } = props;
   const reactFlow = useReactFlow();
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
 
@@ -135,10 +155,9 @@ function InnerGraphCanvas(props: {
     [contextNodes, graph]
   );
   const nodeMap = useMemo(() => new Map(nodeRecords.map((node) => [node.id, node])), [nodeRecords]);
-  const impact = useImpactAnalysis(impactMode ? selectedNodeId : null, graph.edges);
 
   const allowedBySelectedPage = useMemo(() => {
-    if (!selectedPageId) {
+    if (!selectedPageId || impactMode) {
       return null;
     }
 
@@ -156,7 +175,7 @@ function InnerGraphCanvas(props: {
     }
 
     return ids;
-  }, [graph.edges, selectedPageId]);
+  }, [graph.edges, impactMode, selectedPageId]);
 
   const filteredRecords = useMemo(
     () =>
@@ -182,6 +201,16 @@ function InnerGraphCanvas(props: {
   );
 
   const visibleIds = new Set(filteredRecords.map((node) => node.id));
+  const directAffectedIds = useMemo(() => new Set(impactResult.affected), [impactResult.affected]);
+  const indirectAffectedIds = useMemo(() => new Set(impactResult.indirect), [impactResult.indirect]);
+  const activeImpactIds = useMemo(() => {
+    const ids = new Set<string>([...impactResult.affected, ...impactResult.indirect]);
+    if (selectedNodeId) {
+      ids.add(selectedNodeId);
+    }
+    return ids;
+  }, [impactResult.affected, impactResult.indirect, selectedNodeId]);
+
   const flowNodes = useMemo(() => {
     const layoutPositions = getLayoutedNodes(filteredRecords, graph.edges);
 
@@ -194,6 +223,22 @@ function InnerGraphCanvas(props: {
             : node.type === "context"
               ? node.properties
               : [];
+      const issues = healthIssuesByNodeId.get(node.id) ?? [];
+      const errorCount = issues.filter((issue) => issue.severity === "error").length;
+      const warningCount = issues.filter((issue) => issue.severity === "warning").length;
+
+      let emphasis: BaseNodeData["emphasis"] = "normal";
+      if (impactMode && selectedNodeId) {
+        if (node.id === selectedNodeId) {
+          emphasis = "selected";
+        } else if (directAffectedIds.has(node.id)) {
+          emphasis = "direct";
+        } else if (indirectAffectedIds.has(node.id)) {
+          emphasis = "indirect";
+        } else {
+          emphasis = "dimmed";
+        }
+      }
 
       const pos = layoutPositions.find((position) => position.id === node.id);
       return {
@@ -207,64 +252,75 @@ function InnerGraphCanvas(props: {
           color: colors[node.type],
           borderStyle: node.type === "context" ? "dashed" : "solid",
           isShared: node.type === "component" ? node.isShared : false,
-          fields
+          fields,
+          emphasis,
+          issueBadge:
+            errorCount > 0 || warningCount > 0
+              ? {
+                  severity: errorCount > 0 ? "error" : "warning",
+                  errorCount,
+                  warningCount
+                }
+              : null
+        },
+        style: {
+          opacity: impactMode && selectedNodeId && emphasis === "dimmed" ? 0.22 : 1
         }
       };
     });
 
-    return allNodes.map((node) => {
-      const isFocused = selectedNodeId === node.id;
-      const isAffected = impact.affected.includes(node.id) || impact.indirect.includes(node.id);
-      return {
-        ...node,
-        style: {
-          opacity:
-            impactMode && selectedNodeId
-              ? isFocused || isAffected || node.id === selectedNodeId
-                ? 1
-                : 0.28
-              : 1
-        }
-      };
-    });
-  }, [filteredRecords, graph.edges, impact.affected, impact.indirect, impactMode, selectedNodeId]);
+    return allNodes;
+  }, [
+    directAffectedIds,
+    filteredRecords,
+    graph.edges,
+    healthIssuesByNodeId,
+    impactMode,
+    indirectAffectedIds,
+    selectedNodeId
+  ]);
 
   const flowEdges = useMemo<FlowEdge[]>(() => {
-    console.log("[ReactGraph] edges:", graph.edges.length, graph.edges);
-
     return graph.edges
       .filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target))
-      .map((edge) => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        type: "smoothstep",
-        animated: false,
-        style: {
-          stroke: getEdgeColor(edge.relationshipType),
-          strokeWidth: 2.5
-        },
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: getEdgeColor(edge.relationshipType),
-          width: 20,
-          height: 20
-        },
-        label: edge.props?.length
-          ? edge.props
-              .slice(0, 2)
-              .map((prop) => `${prop.name}: ${prop.type}`)
-              .join(", ")
-          : undefined,
-        labelStyle: { fontSize: 10, fill: "#8b949e" },
-        labelBgStyle: { fill: "#1c2333" },
-        data: {
-          tooltip: `${edge.relationshipType} | ${
-            nodeMap.get(edge.source) ? getNodeLabel(nodeMap.get(edge.source) as GraphNodeRecord) : edge.source
-          } -> ${nodeMap.get(edge.target) ? getNodeLabel(nodeMap.get(edge.target) as GraphNodeRecord) : edge.target}`
-        }
-      }));
-  }, [graph.edges, nodeMap, visibleIds]);
+      .map((edge) => {
+        const color = getEdgeColor(edge.relationshipType);
+        const isConnectedToImpact = activeImpactIds.has(edge.source) || activeImpactIds.has(edge.target);
+        const faded = impactMode && selectedNodeId && !isConnectedToImpact;
+
+        return {
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          type: "smoothstep",
+          animated: Boolean(impactMode && selectedNodeId && isConnectedToImpact),
+          style: {
+            stroke: faded ? "rgba(99, 110, 123, 0.28)" : color,
+            strokeWidth: faded ? 1.2 : isConnectedToImpact ? 3.4 : 2.5,
+            opacity: faded ? 0.22 : 0.95
+          },
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            color: faded ? "rgba(99, 110, 123, 0.35)" : color,
+            width: 20,
+            height: 20
+          },
+          label: edge.props?.length
+            ? edge.props
+                .slice(0, 2)
+                .map((prop) => `${prop.name}: ${prop.type}`)
+                .join(", ")
+            : undefined,
+          labelStyle: { fontSize: 10, fill: "#8b949e" },
+          labelBgStyle: { fill: "#1c2333" },
+          data: {
+            tooltip: `${edge.relationshipType} | ${
+              nodeMap.get(edge.source) ? getNodeLabel(nodeMap.get(edge.source) as GraphNodeRecord) : edge.source
+            } -> ${nodeMap.get(edge.target) ? getNodeLabel(nodeMap.get(edge.target) as GraphNodeRecord) : edge.target}`
+          }
+        };
+      });
+  }, [activeImpactIds, graph.edges, impactMode, nodeMap, selectedNodeId, visibleIds]);
 
   return (
     <div className="graph-shell">
@@ -290,6 +346,7 @@ function InnerGraphCanvas(props: {
         <Controls showInteractive={false} />
         <MiniMap pannable style={{ background: "#10141a" }} zoomable />
       </ReactFlow>
+      {summaryPanel}
       {tooltip ? (
         <div className="edge-tooltip" style={{ left: tooltip.x, top: tooltip.y }}>
           {tooltip.text}
@@ -306,7 +363,10 @@ export default function GraphCanvas(props: {
   onSelectNode: (nodeId: string | null) => void;
   filters: FilterState;
   impactMode: boolean;
+  impactResult: ImpactResult;
+  healthIssuesByNodeId: Map<string, HealthIssue[]>;
   onFlowReady: (flow: ReactFlowInstance) => void;
+  summaryPanel?: ReactNode;
 }) {
   return (
     <ReactFlowProvider>

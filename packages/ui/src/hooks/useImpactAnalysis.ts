@@ -7,11 +7,11 @@ export function useImpactAnalysis(selectedNodeId: string | null, edges: Edge[]):
       return { affected: [], indirect: [] };
     }
 
-    const adjacency = new Map<string, string[]>();
+    const reverseAdjacency = new Map<string, string[]>();
     for (const edge of edges) {
-      const next = adjacency.get(edge.source) ?? [];
-      next.push(edge.target);
-      adjacency.set(edge.source, next);
+      const dependents = reverseAdjacency.get(edge.target) ?? [];
+      dependents.push(edge.source);
+      reverseAdjacency.set(edge.target, dependents);
     }
 
     const queue: Array<{ id: string; depth: number }> = [{ id: selectedNodeId, depth: 0 }];
@@ -21,17 +21,17 @@ export function useImpactAnalysis(selectedNodeId: string | null, edges: Edge[]):
 
     while (queue.length > 0) {
       const current = queue.shift()!;
-      for (const next of adjacency.get(current.id) ?? []) {
-        if (seen.has(next)) {
+      for (const dependent of reverseAdjacency.get(current.id) ?? []) {
+        if (seen.has(dependent)) {
           continue;
         }
-        seen.add(next);
+        seen.add(dependent);
         if (current.depth === 0) {
-          affected.add(next);
+          affected.add(dependent);
         } else {
-          indirect.add(next);
+          indirect.add(dependent);
         }
-        queue.push({ id: next, depth: current.depth + 1 });
+        queue.push({ id: dependent, depth: current.depth + 1 });
       }
     }
 
