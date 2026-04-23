@@ -130,7 +130,9 @@ export function findComponents(projectRoot: string): ComponentNode[] {
           usageCount: 0,
           shouldMoveToShared: false,
           isUnused: true,
-          unusedReason: "Not referenced by any page or component tree"
+          unusedReason: "Not referenced by any page or component tree",
+          hasCircularDependency: false,
+          hasPropDrilling: false
         });
       };
 

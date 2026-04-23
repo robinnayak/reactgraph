@@ -15,17 +15,19 @@ interface SidebarProps {
 }
 
 interface HealthSectionConfig {
-  key: "shared" | "move" | "unused";
+  key: "shared" | "move" | "unused" | "circular" | "propDrilling";
   title: string;
   colorClass: string;
   accentClass: string;
   items: ComponentNode[];
   icon?: string;
+  getDetail?: (component: ComponentNode) => string | null;
 }
 
 function HealthSection(props: {
   accentClass: string;
   colorClass: string;
+  getDetail?: (component: ComponentNode) => string | null;
   icon?: string;
   isOpen: boolean;
   items: ComponentNode[];
@@ -34,7 +36,7 @@ function HealthSection(props: {
   selectedNodeId: string | null;
   title: string;
 }) {
-  const { accentClass, colorClass, icon, isOpen, items, onItemClick, onToggle, selectedNodeId, title } = props;
+  const { accentClass, colorClass, getDetail, icon, isOpen, items, onItemClick, onToggle, selectedNodeId, title } = props;
   const ellipsisStyle = {
     whiteSpace: "nowrap",
     overflow: "hidden",
@@ -69,6 +71,11 @@ function HealthSection(props: {
                 <span className="sidebar__health-path" style={ellipsisStyle} title={component.filePath}>
                   {component.filePath}
                 </span>
+                {getDetail?.(component) ? (
+                  <span className="sidebar__health-detail" style={ellipsisStyle} title={getDetail(component) ?? undefined}>
+                    {getDetail(component)}
+                  </span>
+                ) : null}
               </span>
             </button>
           ))}
@@ -96,7 +103,9 @@ export default function Sidebar({
   const [openSections, setOpenSections] = useState({
     shared: true,
     move: true,
-    unused: true
+    unused: true,
+    circular: true,
+    propDrilling: true
   });
   const ellipsisStyle = {
     whiteSpace: "nowrap",
@@ -127,6 +136,28 @@ export default function Sidebar({
       accentClass: "sidebar__health-item--unused",
       items: healthComponents.filter((component) => component.isUnused),
       icon: "🗑"
+    },
+    {
+      key: "circular",
+      title: "CIRCULAR DEPS",
+      colorClass: "dot-circular",
+      accentClass: "sidebar__health-item--circular",
+      items: healthComponents.filter((component) => component.hasCircularDependency)
+    },
+    {
+      key: "propDrilling",
+      title: "PROP DRILLING",
+      colorClass: "dot-prop-drill",
+      accentClass: "sidebar__health-item--prop-drill",
+      items: healthComponents.filter((component) => component.hasPropDrilling),
+      getDetail: (component) => {
+        const details = component.propDrillingDetails ?? [];
+        if (details.length === 0) {
+          return null;
+        }
+
+        return details.map((detail) => `${detail.propName} (${detail.depth})`).join(", ");
+      }
     }
   ].filter((section) => section.items.length > 0);
 
@@ -217,6 +248,7 @@ export default function Sidebar({
               <HealthSection
                 accentClass={section.accentClass}
                 colorClass={section.colorClass}
+                getDetail={section.getDetail}
                 icon={section.icon}
                 isOpen={openSections[section.key]}
                 items={section.items}

@@ -7,6 +7,7 @@ export type {
   PageNode,
   Param,
   Prop,
+  PropDrillingDetail,
   ReturnValue
 } from "@reactgraph-ui/core";
 

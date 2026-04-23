@@ -19,7 +19,9 @@ export default function StatusBar({ nodes, visibleCount, edgeCount, selectedName
     apis: nodes.filter((node) => node.type === "api").length,
     context: nodes.filter((node) => node.type === "context").length,
     shouldMoveToShared: componentNodes.filter((node) => node.shouldMoveToShared).length,
-    unused: componentNodes.filter((node) => node.isUnused).length
+    unused: componentNodes.filter((node) => node.isUnused).length,
+    circularDeps: componentNodes.filter((node) => node.hasCircularDependency).length,
+    propDrilling: componentNodes.filter((node) => node.hasPropDrilling).length
   };
 
   return (
@@ -31,6 +33,8 @@ export default function StatusBar({ nodes, visibleCount, edgeCount, selectedName
       <span>{counts.context} context</span>
       {counts.shouldMoveToShared > 0 ? <span>{counts.shouldMoveToShared} should move to shared</span> : null}
       {counts.unused > 0 ? <span>{counts.unused} unused</span> : null}
+      {counts.circularDeps > 0 ? <span>{counts.circularDeps} circular deps</span> : null}
+      {counts.propDrilling > 0 ? <span>{counts.propDrilling} prop drilling</span> : null}
       <span>{visibleCount} visible nodes</span>
       <span>{edgeCount} visible edges</span>
       <span>

@@ -258,6 +258,8 @@ function InnerGraphCanvas(props: {
           isShared: node.type === "component" ? node.isShared : false,
           shouldMoveToShared: node.type === "component" ? node.shouldMoveToShared : false,
           isUnused: node.type === "component" ? node.isUnused : false,
+          hasCircularDependency: node.type === "component" ? node.hasCircularDependency : false,
+          hasPropDrilling: node.type === "component" ? node.hasPropDrilling : false,
           usageCount: node.type === "component" ? node.usageCount : 0,
           fields,
           emphasis,

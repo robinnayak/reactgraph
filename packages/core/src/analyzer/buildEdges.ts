@@ -1,6 +1,6 @@
 import path from "node:path";
 import type { TSESTree } from "@typescript-eslint/types";
-import type { ApiNode, ComponentNode, Edge, HookNode, PageNode, Prop } from "../types.js";
+import type { ApiNode, ComponentNode, Edge, HookNode, PageNode, Prop, PropDrillingDetail } from "../types.js";
 import {
   TS_GLOBS,
   createNodeId,
@@ -296,6 +296,150 @@ function buildComponentUsageMap(pages: PageNode[], components: ComponentNode[], 
   return usageByComponentId;
 }
 
+function getCanonicalCycleIds(cycleIds: string[]): string[] {
+  const uniqueCycle = cycleIds.slice(0, -1);
+  const rotations = uniqueCycle.map((_, index) => {
+    const rotated = [...uniqueCycle.slice(index), ...uniqueCycle.slice(0, index)];
+    return [...rotated, rotated[0]];
+  });
+
+  return rotations.sort((left, right) => left.join(">").localeCompare(right.join(">")))[0] ?? cycleIds;
+}
+
+function detectCircularDependencies(components: ComponentNode[], seeds: EdgeSeed[]): Map<string, string[]> {
+  const componentById = new Map(components.map((component) => [component.id, component]));
+  const childrenByComponentId = new Map<string, string[]>();
+
+  for (const seed of seeds) {
+    if (
+      seed.relationshipType !== "renders" ||
+      !componentById.has(seed.source) ||
+      !componentById.has(seed.target)
+    ) {
+      continue;
+    }
+
+    const children = childrenByComponentId.get(seed.source) ?? [];
+    children.push(seed.target);
+    childrenByComponentId.set(seed.source, children);
+  }
+
+  const cycles = new Map<string, string[]>();
+  const seenCycleKeys = new Set<string>();
+
+  const visit = (nodeId: string, path: string[]) => {
+    for (const childId of childrenByComponentId.get(nodeId) ?? []) {
+      const existingIndex = path.indexOf(childId);
+      if (existingIndex >= 0) {
+        const cycleIds = [...path.slice(existingIndex), childId];
+        const canonicalCycleIds = getCanonicalCycleIds(cycleIds);
+        const cycleKey = canonicalCycleIds.join(">");
+        if (seenCycleKeys.has(cycleKey)) {
+          continue;
+        }
+
+        seenCycleKeys.add(cycleKey);
+        const chain = canonicalCycleIds.map((id) => componentById.get(id)?.name ?? id);
+        for (const participantId of new Set(canonicalCycleIds.slice(0, -1))) {
+          cycles.set(participantId, chain);
+        }
+        continue;
+      }
+
+      visit(childId, [...path, childId]);
+    }
+  };
+
+  for (const component of components) {
+    visit(component.id, [component.id]);
+  }
+
+  return cycles;
+}
+
+function detectPropDrilling(
+  pages: PageNode[],
+  components: ComponentNode[],
+  seeds: EdgeSeed[]
+): Map<string, PropDrillingDetail[]> {
+  const componentById = new Map(components.map((component) => [component.id, component]));
+  const nodeNameById = new Map<string, string>([
+    ...pages.map((page) => [page.id, page.name] as const),
+    ...components.map((component) => [component.id, component.name] as const)
+  ]);
+  const renderEdgesBySource = new Map<string, EdgeSeed[]>();
+
+  for (const seed of seeds) {
+    if (seed.relationshipType !== "renders" || !seed.props?.length) {
+      continue;
+    }
+
+    const renderEdges = renderEdgesBySource.get(seed.source) ?? [];
+    renderEdges.push(seed);
+    renderEdgesBySource.set(seed.source, renderEdges);
+  }
+
+  const detailsByComponentId = new Map<string, PropDrillingDetail[]>();
+  const seenChains = new Set<string>();
+
+  const recordChain = (propName: string, chainIds: string[]) => {
+    if (chainIds.length < 4) {
+      return;
+    }
+
+    const key = `${propName}:${chainIds.join(">")}`;
+    if (seenChains.has(key)) {
+      return;
+    }
+    seenChains.add(key);
+
+    const detail: PropDrillingDetail = {
+      propName,
+      chain: chainIds.map((id) => nodeNameById.get(id) ?? id),
+      depth: chainIds.length
+    };
+
+    for (const componentId of chainIds.filter((id) => componentById.has(id))) {
+      const details = detailsByComponentId.get(componentId) ?? [];
+      details.push(detail);
+      detailsByComponentId.set(componentId, details);
+    }
+  };
+
+  const extendChain = (propName: string, chainIds: string[]) => {
+    const currentId = chainIds[chainIds.length - 1];
+    const nextEdges = (renderEdgesBySource.get(currentId) ?? []).filter((edge) =>
+      edge.props?.some((prop) => prop.name === propName)
+    );
+    let extended = false;
+
+    for (const edge of nextEdges) {
+      if (chainIds.includes(edge.target)) {
+        continue;
+      }
+
+      extended = true;
+      extendChain(propName, [...chainIds, edge.target]);
+    }
+
+    if (!extended) {
+      recordChain(propName, chainIds);
+    }
+  };
+
+  for (const edge of seeds) {
+    if (edge.relationshipType !== "renders" || !edge.props?.length) {
+      continue;
+    }
+
+    for (const prop of edge.props) {
+      extendChain(prop.name, [edge.source, edge.target]);
+    }
+  }
+
+  return detailsByComponentId;
+}
+
 export function buildEdges(
   pages: PageNode[],
   components: ComponentNode[],
@@ -381,6 +525,8 @@ export function buildEdges(
   }
 
   const usageByComponentId = buildComponentUsageMap(pages, components, seeds);
+  const circularDependenciesByComponentId = detectCircularDependencies(components, seeds);
+  const propDrillingByComponentId = detectPropDrilling(pages, components, seeds);
   const allPageIds = pages.map((page) => page.id);
 
   for (const component of components) {
@@ -396,6 +542,10 @@ export function buildEdges(
     component.shouldMoveToShared = shouldMoveToShared;
     component.isUnused = isUnused;
     component.unusedReason = isUnused ? "Not referenced by any page or component tree" : undefined;
+    component.hasCircularDependency = circularDependenciesByComponentId.has(component.id);
+    component.circularDependencyChain = circularDependenciesByComponentId.get(component.id);
+    component.hasPropDrilling = propDrillingByComponentId.has(component.id);
+    component.propDrillingDetails = propDrillingByComponentId.get(component.id);
   }
 
   const dedupedSeeds = dedupeBy(

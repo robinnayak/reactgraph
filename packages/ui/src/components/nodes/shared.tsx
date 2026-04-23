@@ -10,6 +10,8 @@ export interface BaseNodeData {
   isShared?: boolean;
   shouldMoveToShared?: boolean;
   isUnused?: boolean;
+  hasCircularDependency?: boolean;
+  hasPropDrilling?: boolean;
   usageCount?: number;
   fields?: Array<{ name: string; type: string; required?: boolean }>;
   emphasis?: "normal" | "selected" | "direct" | "indirect" | "dimmed";
@@ -23,7 +25,13 @@ export interface BaseNodeData {
 export function NodeCard({ data }: NodeProps<BaseNodeData>) {
   const fields = data.fields ?? [];
   const emphasisClass = data.emphasis ? `graph-node--${data.emphasis}` : "graph-node--normal";
-  const unusedClass = data.isUnused ? " graph-node--unused" : "";
+  const healthClass = data.hasCircularDependency
+    ? " graph-node--circular"
+    : data.isUnused
+      ? " graph-node--unused"
+      : data.hasPropDrilling
+        ? " graph-node--prop-drill"
+        : "";
   const issueLabel = data.issueBadge
     ? `${data.issueBadge.errorCount + data.issueBadge.warningCount} issue${data.issueBadge.errorCount + data.issueBadge.warningCount === 1 ? "" : "s"}`
     : "";
@@ -33,17 +41,21 @@ export function NodeCard({ data }: NodeProps<BaseNodeData>) {
     textOverflow: "ellipsis",
     maxWidth: "100%"
   } as const;
-  const badge = data.isUnused
-    ? { label: "UNUSED", className: "graph-node__badge graph-node__badge--unused" }
-    : data.shouldMoveToShared
-      ? { label: "MOVE TO SHARED", className: "graph-node__badge graph-node__badge--move" }
-      : data.isShared
-        ? { label: "SHARED", className: "graph-node__badge" }
-      : null;
+  const badge = data.hasCircularDependency
+    ? { label: "CIRCULAR", className: "graph-node__badge graph-node__badge--circular" }
+    : data.isUnused
+      ? { label: "UNUSED", className: "graph-node__badge graph-node__badge--unused" }
+      : data.hasPropDrilling
+        ? { label: "PROP DRILL", className: "graph-node__badge graph-node__badge--prop-drill" }
+        : data.shouldMoveToShared
+          ? { label: "MOVE TO SHARED", className: "graph-node__badge graph-node__badge--move" }
+          : data.isShared
+            ? { label: "SHARED", className: "graph-node__badge" }
+            : null;
 
   return (
     <div
-      className={`graph-node ${emphasisClass}${unusedClass}`}
+      className={`graph-node ${emphasisClass}${healthClass}`}
       style={{
         borderStyle: data.borderStyle ?? "solid",
         boxShadow: `0 0 20px color-mix(in srgb, ${data.color} 10%, transparent)`

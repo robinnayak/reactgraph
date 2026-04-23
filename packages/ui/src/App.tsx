@@ -370,6 +370,11 @@ export default function App() {
     setFocusNodeId(nodeId);
   };
 
+  const handleJumpToNode = (nodeId: string) => {
+    handleNodeFocus(nodeId);
+    setSelectedNodeId(nodeId);
+  };
+
   const handleRunHealthCheck = () => {
     setHealthError(null);
     postToExtension({ type: "startHealthCheck" });
@@ -499,7 +504,7 @@ export default function App() {
         node={selectedNode}
         onClose={() => setSelectedNodeId(null)}
         onPageSelect={handlePageSelect}
-        onJumpToNode={setSelectedNodeId}
+        onJumpToNode={handleJumpToNode}
         onOpenInIde={openInIde}
         usedIn={usedIn}
       />

@@ -247,6 +247,109 @@ describe("core analyzer", () => {
     expect(component?.usedInPages).toEqual([]);
   });
 
+  it("detects a circular dependency between two components", async () => {
+    const root = makeProject({
+      "components/ComponentA.tsx": `
+        import { ComponentB } from "./ComponentB";
+        export function ComponentA() {
+          return <ComponentB />;
+        }
+      `,
+      "components/ComponentB.tsx": `
+        import { ComponentA } from "./ComponentA";
+        export function ComponentB() {
+          return <ComponentA />;
+        }
+      `
+    });
+
+    const graph = await analyze(root, { writeJson: false });
+    const componentA = graph.components.find((entry) => entry.name === "ComponentA");
+    const componentB = graph.components.find((entry) => entry.name === "ComponentB");
+
+    expect(componentA?.hasCircularDependency).toBe(true);
+    expect(componentB?.hasCircularDependency).toBe(true);
+    expect(componentA?.circularDependencyChain).toEqual(["ComponentA", "ComponentB", "ComponentA"]);
+    expect(componentB?.circularDependencyChain).toEqual(["ComponentA", "ComponentB", "ComponentA"]);
+  });
+
+  it("detects a prop passed through four components as prop drilling", async () => {
+    const root = makeProject({
+      "pages/index.tsx": `
+        import { ComponentA } from "../components/ComponentA";
+        export default function HomePage() {
+          return <ComponentA userId="123" />;
+        }
+      `,
+      "components/ComponentA.tsx": `
+        import { ComponentB } from "./ComponentB";
+        export function ComponentA() {
+          return <ComponentB userId="123" />;
+        }
+      `,
+      "components/ComponentB.tsx": `
+        import { ComponentC } from "./ComponentC";
+        export function ComponentB() {
+          return <ComponentC userId="123" />;
+        }
+      `,
+      "components/ComponentC.tsx": `
+        import { ComponentD } from "./ComponentD";
+        export function ComponentC() {
+          return <ComponentD userId="123" />;
+        }
+      `,
+      "components/ComponentD.tsx": `
+        export function ComponentD() {
+          return <div />;
+        }
+      `
+    });
+
+    const graph = await analyze(root, { writeJson: false });
+
+    for (const componentName of ["ComponentA", "ComponentB", "ComponentC", "ComponentD"]) {
+      const component = graph.components.find((entry) => entry.name === componentName);
+      expect(component?.hasPropDrilling).toBe(true);
+      expect(component?.propDrillingDetails).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            propName: "userId",
+            chain: ["ComponentA", "ComponentB", "ComponentC", "ComponentD"],
+            depth: 4
+          })
+        ])
+      );
+    }
+  });
+
+  it("does not flag a prop passed through only two components as prop drilling", async () => {
+    const root = makeProject({
+      "pages/index.tsx": `
+        import { ComponentA } from "../components/ComponentA";
+        export default function HomePage() {
+          return <ComponentA userId="123" />;
+        }
+      `,
+      "components/ComponentA.tsx": `
+        import { ComponentB } from "./ComponentB";
+        export function ComponentA() {
+          return <ComponentB userId="123" />;
+        }
+      `,
+      "components/ComponentB.tsx": `
+        export function ComponentB() {
+          return <div />;
+        }
+      `
+    });
+
+    const graph = await analyze(root, { writeJson: false });
+
+    expect(graph.components.every((component) => component.hasPropDrilling === false)).toBe(true);
+    expect(graph.components.every((component) => component.propDrillingDetails === undefined)).toBe(true);
+  });
+
   it("generates a sorted file tree with exclusions and empty folders", async () => {
     const root = makeProject({
       "src/components/Button.tsx": "export const Button = () => null;",

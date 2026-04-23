@@ -46,6 +46,35 @@ function dependencyCount(node: GraphNodeRecord, edges: Edge[]): number {
   return edges.filter((edge) => edge.source === node.id).length;
 }
 
+function ChainChips(props: {
+  chain: string[];
+  allNodes: GraphNodeRecord[];
+  onJumpToNode: (nodeId: string) => void;
+}) {
+  const { allNodes, chain, onJumpToNode } = props;
+
+  return (
+    <div className="inspector__flow">
+      {chain.map((componentName, index) => {
+        const matchingNode = allNodes.find((entry) => "name" in entry && entry.name === componentName);
+        return (
+          <span className="inspector__flow" key={`${componentName}:${index}`} style={{ display: "contents" }}>
+            <button
+              className="chip-list__button"
+              disabled={!matchingNode}
+              onClick={() => matchingNode ? onJumpToNode(matchingNode.id) : undefined}
+              type="button"
+            >
+              {componentName}
+            </button>
+            {index < chain.length - 1 ? <span className="inspector__flow-arrow">{"\u2192"}</span> : null}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function NodeInspector({
   node,
   allNodes,
@@ -299,6 +328,31 @@ export default function NodeInspector({
                 {"\u26A0\uFE0F"} Unused Component: This component is not referenced by any page or component. It may be safe to
                 delete.
               </div>
+            ) : null}
+            {node.hasCircularDependency && node.circularDependencyChain ? (
+              <div className="inspector__callout inspector__callout--circular">
+                <strong>{"\uD83D\uDD04"} Circular Dependency Detected</strong>
+                <ChainChips allNodes={allNodes} chain={node.circularDependencyChain} onJumpToNode={onJumpToNode} />
+                <div>This creates an infinite render loop risk.</div>
+                <div>Consider refactoring to break the cycle.</div>
+              </div>
+            ) : null}
+            {node.hasPropDrilling && node.propDrillingDetails?.length ? (
+              <>
+                {node.propDrillingDetails.map((detail) => (
+                  <div
+                    className="inspector__callout inspector__callout--prop-drill"
+                    key={`${detail.propName}:${detail.chain.join(">")}`}
+                  >
+                    <strong>{"\u26A0\uFE0F"} Prop Drilling Detected</strong>
+                    <div>
+                      "{detail.propName}" passed through {detail.depth} components:
+                    </div>
+                    <ChainChips allNodes={allNodes} chain={detail.chain} onJumpToNode={onJumpToNode} />
+                    <div>Consider using React Context or a state manager.</div>
+                  </div>
+                ))}
+              </>
             ) : null}
           </div>
         </section>

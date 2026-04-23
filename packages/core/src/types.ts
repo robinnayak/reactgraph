@@ -25,6 +25,16 @@ export interface ComponentNode {
   shouldMoveToShared: boolean;
   isUnused: boolean;
   unusedReason?: string;
+  hasCircularDependency: boolean;
+  circularDependencyChain?: string[];
+  hasPropDrilling: boolean;
+  propDrillingDetails?: PropDrillingDetail[];
+}
+
+export interface PropDrillingDetail {
+  propName: string;
+  chain: string[];
+  depth: number;
 }
 
 export interface HookNode {

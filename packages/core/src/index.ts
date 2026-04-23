@@ -14,6 +14,7 @@ export type {
   ApiNode,
   Edge,
   Prop,
+  PropDrillingDetail,
   Param,
   ReturnValue,
   ComponentMeta,
