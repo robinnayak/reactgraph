@@ -35,6 +35,7 @@ const initialFilters: FilterState = {
 };
 
 const emptyGraph: GraphData = {
+  projectType: "react",
   pages: [],
   components: [],
   hooks: [],
@@ -492,6 +493,7 @@ export default function App() {
           edgeCount={graph.edges.length}
           healthResults={healthResults}
           nodes={allNodes}
+          projectType={graph.projectType}
           selectedName={selectedNode?.name}
           visibleCount={searchedNodes.length}
         />

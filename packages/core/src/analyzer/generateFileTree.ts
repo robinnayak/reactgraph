@@ -4,11 +4,14 @@ import path from "node:path";
 const EXCLUDED_DIRECTORY_NAMES = new Set([
   "node_modules",
   ".next",
+  ".expo",
   ".git",
   ".turbo",
   ".cache",
   "dist",
   "build",
+  "android",
+  "ios",
   ".vercel",
   "coverage"
 ]);

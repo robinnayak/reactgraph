@@ -1,4 +1,4 @@
-import type { GraphNodeRecord, HealthCheckResults } from "../types";
+import type { GraphData, GraphNodeRecord, HealthCheckResults } from "../types";
 
 interface StatusBarProps {
   nodes: GraphNodeRecord[];
@@ -6,9 +6,29 @@ interface StatusBarProps {
   edgeCount: number;
   selectedName?: string;
   healthResults: HealthCheckResults | null;
+  projectType: GraphData["projectType"];
 }
 
-export default function StatusBar({ nodes, visibleCount, edgeCount, selectedName, healthResults }: StatusBarProps) {
+const projectTypeColors: Record<GraphData["projectType"], string> = {
+  nextjs: "#2563eb",
+  expo: "#7c3aed",
+  react: "#06b6d4"
+};
+
+const projectTypeLabels: Record<GraphData["projectType"], string> = {
+  nextjs: "Next.js",
+  expo: "Expo",
+  react: "React"
+};
+
+export default function StatusBar({
+  nodes,
+  visibleCount,
+  edgeCount,
+  selectedName,
+  healthResults,
+  projectType
+}: StatusBarProps) {
   const componentNodes = nodes.filter(
     (node): node is Extract<GraphNodeRecord, { type: "component" }> => node.type === "component"
   );
@@ -30,6 +50,11 @@ export default function StatusBar({ nodes, visibleCount, edgeCount, selectedName
       <span>{counts.components} components</span>
       <span>{counts.hooks} hooks</span>
       <span>{counts.apis} APIs</span>
+      <span>|</span>
+      <span>
+        Project: <strong style={{ color: projectTypeColors[projectType] }}>{projectTypeLabels[projectType]}</strong>
+      </span>
+      {counts.pages === 0 ? <span>⚠️ No pages detected — open Settings to configure page detection patterns</span> : null}
       <span>{counts.context} context</span>
       {counts.shouldMoveToShared > 0 ? <span>{counts.shouldMoveToShared} should move to shared</span> : null}
       {counts.unused > 0 ? <span>{counts.unused} unused</span> : null}

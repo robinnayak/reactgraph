@@ -1,4 +1,5 @@
 export interface GraphData {
+  projectType: "nextjs" | "expo" | "react";
   pages: PageNode[];
   components: ComponentNode[];
   hooks: HookNode[];
@@ -75,7 +76,7 @@ export interface Edge {
   id: string;
   source: string;
   target: string;
-  relationshipType: "renders" | "uses" | "calls" | "provides";
+  relationshipType: "renders" | "uses" | "calls" | "provides" | "navigates";
   props?: Prop[];
 }
 

@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { analyze, findApis, findComponents, findHooks, findPages, generateFileTree } from "../src/index.js";
+import { analyze, detectProjectType, findApis, findComponents, findHooks, findPages, generateFileTree } from "../src/index.js";
 
 const tempDirs: string[] = [];
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
@@ -188,6 +188,37 @@ describe("core analyzer", () => {
     );
   });
 
+  it("detects Expo projects from package.json", () => {
+    const root = makeProject({
+      "package.json": JSON.stringify({
+        dependencies: {
+          expo: "^52.0.0"
+        }
+      })
+    });
+
+    expect(detectProjectType(root)).toBe("expo");
+  });
+
+  it("detects React Native screens as pages", () => {
+    const root = makeProject({
+      "src/screens/DashboardScreen.tsx": `
+        export default function DashboardScreen() {
+          return <View />;
+        }
+      `
+    });
+
+    expect(findPages(root)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "DashboardScreen",
+          filePath: "src/screens/DashboardScreen.tsx"
+        })
+      ])
+    );
+  });
+
   it("marks a component used by two pages as shared with usage count", async () => {
     const root = makeProject({
       "pages/home.tsx": `
@@ -348,6 +379,34 @@ describe("core analyzer", () => {
 
     expect(graph.components.every((component) => component.hasPropDrilling === false)).toBe(true);
     expect(graph.components.every((component) => component.propDrillingDetails === undefined)).toBe(true);
+  });
+
+  it("does not mark Expo layout files as unused", async () => {
+    const root = makeProject({
+      "package.json": JSON.stringify({
+        dependencies: {
+          expo: "^52.0.0"
+        }
+      }),
+      "src/app/_layout.tsx": `
+        export default function RootLayout() {
+          return <Stack />;
+        }
+      `,
+      "src/app/dashboard.tsx": `
+        export default function DashboardScreen() {
+          return <View />;
+        }
+      `
+    });
+
+    const graph = await analyze(root, { writeJson: false });
+    const layout = graph.components.find((component) => component.filePath === "src/app/_layout.tsx");
+
+    expect(graph.projectType).toBe("expo");
+    expect(layout).toMatchObject({
+      isUnused: false
+    });
   });
 
   it("generates a sorted file tree with exclusions and empty folders", async () => {

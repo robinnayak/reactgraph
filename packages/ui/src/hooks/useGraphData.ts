@@ -13,7 +13,10 @@ function isGraphData(value: unknown): value is GraphData {
   }
 
   const candidate = value as Record<string, unknown>;
-  return ["pages", "components", "hooks", "apis", "edges"].every((key) => Array.isArray(candidate[key]));
+  return (
+    (candidate.projectType === "nextjs" || candidate.projectType === "expo" || candidate.projectType === "react") &&
+    ["pages", "components", "hooks", "apis", "edges"].every((key) => Array.isArray(candidate[key]))
+  );
 }
 
 async function fetchGraphData(url: string): Promise<GraphData> {

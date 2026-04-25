@@ -6,6 +6,7 @@ import {
   dedupeBy,
   extractParams,
   extractReturns,
+  fileUsesReactNativeHookIndicators,
   inferAnonymousExportName,
   isHookName,
   parseModule,
@@ -21,6 +22,7 @@ export function findHooks(projectRoot: string): HookNode[] {
     try {
       const module = parseModule(filePath);
       const relativePath = relativeFilePath(projectRoot, filePath);
+      const usesNativeHookIndicators = fileUsesReactNativeHookIndicators(module);
 
       const pushHook = (
         name: string,
@@ -29,7 +31,7 @@ export function findHooks(projectRoot: string): HookNode[] {
           | TSESTree.FunctionExpression
           | TSESTree.ArrowFunctionExpression
       ) => {
-        if (!isHookName(name)) {
+        if (!isHookName(name) && !usesNativeHookIndicators) {
           return;
         }
 

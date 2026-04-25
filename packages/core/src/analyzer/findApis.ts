@@ -78,6 +78,21 @@ function getStringValue(node: TSESTree.Node | undefined, source: string): string
   return undefined;
 }
 
+function getEndpointValue(node: TSESTree.Node | undefined, source: string): string | undefined {
+  if (!node) {
+    return undefined;
+  }
+
+  if (node.type === "TemplateLiteral") {
+    const cooked = node.quasis.map((quasi) => quasi.value.cooked ?? "").join("");
+    if (node.expressions.length > 0 && cooked.startsWith("/")) {
+      return cooked;
+    }
+  }
+
+  return getStringValue(node, source);
+}
+
 function getMethodFromOptions(node: TSESTree.CallExpression): Method {
   const optionsArg = node.arguments[1];
   if (optionsArg?.type !== "ObjectExpression") {
@@ -118,7 +133,7 @@ function getQueryEndpoint(config: TSESTree.ObjectExpression, source: string): st
           }
 
           if (node.callee.type === "Identifier" && node.callee.name === "fetch") {
-            endpoint = normalizeEndpoint(getStringValue(node.arguments[0] as TSESTree.Node | undefined, source));
+            endpoint = normalizeEndpoint(getEndpointValue(node.arguments[0] as TSESTree.Node | undefined, source));
           }
         });
         if (endpoint) {
@@ -153,7 +168,7 @@ export function findApis(projectRoot: string): ApiNode[] {
         }
 
         if (node.callee.type === "Identifier" && node.callee.name === "fetch") {
-          const endpoint = normalizeEndpoint(getStringValue(node.arguments[0] as TSESTree.Node | undefined, module.source));
+          const endpoint = normalizeEndpoint(getEndpointValue(node.arguments[0] as TSESTree.Node | undefined, module.source));
           if (endpoint) {
             apis.push(createApiNode(endpoint, getMethodFromOptions(node)));
           }
@@ -170,7 +185,7 @@ export function findApis(projectRoot: string): ApiNode[] {
             return;
           }
 
-          const endpoint = normalizeEndpoint(getStringValue(node.arguments[0] as TSESTree.Node | undefined, module.source));
+          const endpoint = normalizeEndpoint(getEndpointValue(node.arguments[0] as TSESTree.Node | undefined, module.source));
           if (!endpoint) {
             return;
           }
@@ -180,7 +195,7 @@ export function findApis(projectRoot: string): ApiNode[] {
         }
 
         if (node.callee.type === "Identifier" && node.callee.name === "useSWR") {
-          const endpoint = normalizeEndpoint(getStringValue(node.arguments[0] as TSESTree.Node | undefined, module.source));
+          const endpoint = normalizeEndpoint(getEndpointValue(node.arguments[0] as TSESTree.Node | undefined, module.source));
           if (endpoint) {
             apis.push(createApiNode(endpoint, "GET"));
           }

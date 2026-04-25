@@ -1,4 +1,5 @@
 export { analyze } from "./analyzer/analyze.js";
+export { detectProjectType } from "./analyzer/findPages.js";
 export { findPages } from "./analyzer/findPages.js";
 export { findComponents } from "./analyzer/findComponents.js";
 export { findHooks } from "./analyzer/findHooks.js";

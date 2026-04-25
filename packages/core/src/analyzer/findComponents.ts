@@ -1,13 +1,14 @@
 import type { TSESTree } from "@typescript-eslint/types";
 import type { ComponentNode } from "../types.js";
 import {
-  JSX_GLOBS,
+  TS_GLOBS,
   createNodeId,
   dedupeBy,
   extractPropsFromMembers,
   extractPropsFromTypeAliasOrInterface,
   getTypeMembers,
   inferAnonymousExportName,
+  isComponentLikeFile,
   isLikelyComponentName,
   looksLikeJsxReturningFunction,
   parseModule,
@@ -88,14 +89,14 @@ function getVariableTypeProps(
 export function findComponents(projectRoot: string): ComponentNode[] {
   const components: ComponentNode[] = [];
 
-  for (const filePath of resolveProjectFiles(projectRoot, JSX_GLOBS)) {
+  for (const filePath of resolveProjectFiles(projectRoot, TS_GLOBS)) {
     const relativePath = relativeFilePath(projectRoot, filePath);
-    if (/^pages\/.*\.tsx$/.test(relativePath) || /^app\/(?:.*\/)?page\.tsx$/.test(relativePath)) {
-      continue;
-    }
-
     try {
       const module = parseModule(filePath);
+      if (!isComponentLikeFile(relativePath, module)) {
+        continue;
+      }
+
       const typeMap = new Map<string, ComponentNode["props"]>();
 
       for (const statement of (module.ast as TSESTree.Program).body) {

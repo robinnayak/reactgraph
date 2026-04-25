@@ -11,10 +11,36 @@ export const JSX_GLOBS = ["**/*.tsx"];
 export const DEFAULT_IGNORES = [
   "**/node_modules/**",
   "**/.next/**",
+  "**/.expo/**",
   "**/dist/**",
+  "**/build/**",
+  "**/android/**",
+  "**/ios/**",
   "**/coverage/**",
   "**/.turbo/**"
 ];
+
+const ROUTE_LIKE_SEGMENTS = new Set(["pages", "screens", "app", "views", "routes"]);
+const NON_ROUTE_SEGMENTS = new Set([
+  "components",
+  "hooks",
+  "lib",
+  "utils",
+  "types",
+  "styles",
+  "config",
+  "store",
+  "stores",
+  "services",
+  "assets"
+]);
+const REACT_NATIVE_HOOK_INDICATORS = new Set([
+  "useWindowDimensions",
+  "useColorScheme",
+  "useNavigation",
+  "useRoute",
+  "useFocusEffect"
+]);
 
 export function resolveProjectFiles(projectRoot: string, patterns: string[]): string[] {
   return (patterns ?? []).flatMap((pattern) =>
@@ -95,8 +121,14 @@ export function inferAnonymousExportName(filePath: string): string {
   if (base === "page") {
     return path.basename(path.dirname(filePath)) || "Page";
   }
+  if (base === "_layout") {
+    return path.basename(path.dirname(filePath)) || "Layout";
+  }
   if (base === "index") {
     return path.basename(path.dirname(filePath)) || "Index";
+  }
+  if (base.startsWith("+")) {
+    return base.slice(1) || "Route";
   }
   return base;
 }
@@ -333,6 +365,224 @@ export function isHookName(name: string): boolean {
 
 export function isLikelyComponentName(name: string): boolean {
   return /^[A-Z][A-Za-z0-9_]*$/.test(name);
+}
+
+export function isFrameworkReservedFile(filePath: string): boolean {
+  const normalized = filePath.replace(/\\/g, "/");
+  const reserved = [
+    "layout.tsx",
+    "layout.ts",
+    "error.tsx",
+    "error.ts",
+    "loading.tsx",
+    "loading.ts",
+    "not-found.tsx",
+    "not-found.ts",
+    "template.tsx",
+    "template.ts",
+    "middleware.ts",
+    "middleware.tsx",
+    "_layout.tsx",
+    "_layout.ts",
+    "+not-found.tsx",
+    "+html.tsx",
+    "App.tsx",
+    "App.ts",
+    "index.tsx",
+    "index.ts"
+  ];
+
+  return reserved.some((name) => normalized.endsWith(name) || normalized.endsWith(`/${name}`));
+}
+
+export function pathSegments(filePath: string): string[] {
+  return relativeSegments(filePath);
+}
+
+function relativeSegments(filePath: string): string[] {
+  return filePath.replace(/\\/g, "/").split("/").filter(Boolean);
+}
+
+export function hasDefaultComponentExport(module: ParsedModule): boolean {
+  return (module.ast as TSESTree.Program).body.some((statement) => {
+    if (statement.type !== "ExportDefaultDeclaration") {
+      return false;
+    }
+
+    const declaration = statement.declaration;
+    if (
+      declaration.type === "FunctionDeclaration" ||
+      declaration.type === "FunctionExpression" ||
+      declaration.type === "ArrowFunctionExpression"
+    ) {
+      return looksLikeJsxReturningFunction(declaration);
+    }
+
+    if (declaration.type === "Identifier" && module.defaultExportName) {
+      let matches = false;
+      traverse(module.ast, (node) => {
+        if (
+          matches ||
+          node.type !== "VariableDeclarator" ||
+          node.id.type !== "Identifier" ||
+          node.id.name !== module.defaultExportName ||
+          !node.init ||
+          (node.init.type !== "ArrowFunctionExpression" && node.init.type !== "FunctionExpression")
+        ) {
+          return;
+        }
+
+        matches = looksLikeJsxReturningFunction(node.init);
+      });
+      return matches;
+    }
+
+    return false;
+  });
+}
+
+export function isRouteLikeParentFolder(segment: string | undefined): boolean {
+  if (!segment) {
+    return false;
+  }
+
+  const normalized = segment.toLowerCase();
+  return /^[a-z0-9_-]+$/.test(normalized) && !NON_ROUTE_SEGMENTS.has(normalized);
+}
+
+export function isPageLikeFile(relativePath: string, module?: ParsedModule): boolean {
+  const normalized = relativePath.replace(/\\/g, "/");
+  const segments = relativeSegments(normalized);
+  const fileName = path.basename(normalized);
+  const baseName = path.basename(normalized, path.extname(normalized));
+  const parent = segments.at(-2)?.toLowerCase();
+  const hasDefaultExport = module ? hasDefaultComponentExport(module) : false;
+
+  if (
+    [
+      "layout.tsx",
+      "layout.ts",
+      "error.tsx",
+      "error.ts",
+      "loading.tsx",
+      "loading.ts",
+      "not-found.tsx",
+      "not-found.ts",
+      "template.tsx",
+      "template.ts",
+      "middleware.ts",
+      "middleware.tsx",
+      "_layout.tsx",
+      "_layout.ts",
+      "+not-found.tsx",
+      "+html.tsx"
+    ].some((name) => normalized.endsWith(name) || normalized.endsWith(`/${name}`))
+  ) {
+    return false;
+  }
+
+  if (
+    /(^|\/)(pages|screens|app|views|routes)\//.test(normalized) ||
+    /(?:Page|Screen|View|Route)\.tsx?$/.test(fileName)
+  ) {
+    return true;
+  }
+
+  if (baseName === "page") {
+    return true;
+  }
+
+  if (hasDefaultExport && isRouteLikeParentFolder(parent)) {
+    return true;
+  }
+
+  if (hasDefaultExport && parent === "app") {
+    return true;
+  }
+
+  return false;
+}
+
+export function isComponentLikeFile(relativePath: string, module?: ParsedModule): boolean {
+  const normalized = relativePath.replace(/\\/g, "/");
+  const fileName = path.basename(normalized);
+  const baseName = path.basename(fileName, path.extname(fileName));
+  const hasComponentExport = module ? hasReactComponentExport(module) : false;
+
+  if (isPageLikeFile(normalized, module) && !/(^|\/)(app|screens)\//.test(normalized)) {
+    return false;
+  }
+
+  if (/(^|\/)components\//.test(normalized)) {
+    return true;
+  }
+
+  if (/(^|\/)(app|screens)\//.test(normalized) && baseName !== "page" && hasComponentExport) {
+    return true;
+  }
+
+  if (isLikelyComponentName(path.basename(fileName, path.extname(fileName))) && hasComponentExport) {
+    return true;
+  }
+
+  return hasComponentExport && !segmentsContainRouteLikeFolder(normalized);
+}
+
+function segmentsContainRouteLikeFolder(relativePath: string): boolean {
+  return relativeSegments(relativePath).some((segment) => ROUTE_LIKE_SEGMENTS.has(segment.toLowerCase()));
+}
+
+export function hasReactComponentExport(module: ParsedModule): boolean {
+  let found = false;
+
+  traverse(module.ast, (node) => {
+    if (found) {
+      return;
+    }
+
+    if (node.type === "FunctionDeclaration" && node.id && module.exports.has(node.id.name)) {
+      found = looksLikeJsxReturningFunction(node);
+      return;
+    }
+
+    if (
+      node.type === "VariableDeclarator" &&
+      node.id.type === "Identifier" &&
+      node.init &&
+      (node.init.type === "ArrowFunctionExpression" || node.init.type === "FunctionExpression") &&
+      (module.exports.has(node.id.name) || module.defaultExportName === node.id.name)
+    ) {
+      found = looksLikeJsxReturningFunction(node.init);
+      return;
+    }
+
+    if (
+      node.type === "ExportDefaultDeclaration" &&
+      (node.declaration.type === "FunctionDeclaration" ||
+        node.declaration.type === "FunctionExpression" ||
+        node.declaration.type === "ArrowFunctionExpression")
+    ) {
+      found = looksLikeJsxReturningFunction(node.declaration);
+    }
+  });
+
+  return found;
+}
+
+export function fileUsesReactNativeHookIndicators(module: ParsedModule): boolean {
+  let found = false;
+
+  traverse(module.ast, (node) => {
+    if (found || node.type !== "Identifier") {
+      return;
+    }
+
+    if (REACT_NATIVE_HOOK_INDICATORS.has(node.name)) {
+      found = true;
+    }
+  });
+
+  return found;
 }
 
 export function looksLikeJsxReturningFunction(

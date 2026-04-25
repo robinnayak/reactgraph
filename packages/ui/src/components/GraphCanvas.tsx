@@ -71,6 +71,8 @@ function getEdgeColor(type: string): string {
       return "#ea580c";
     case "provides":
       return "#7c3aed";
+    case "navigates":
+      return "#06b6d4";
     default:
       return "#30363d";
   }

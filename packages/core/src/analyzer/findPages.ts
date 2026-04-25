@@ -1,23 +1,50 @@
+import fs from "node:fs";
 import path from "node:path";
 import type { TSESTree } from "@typescript-eslint/types";
 import type { PageNode } from "../types.js";
 import {
-  PAGE_GLOBS,
+  TS_GLOBS,
   createNodeId,
   dedupeBy,
   inferAnonymousExportName,
+  isPageLikeFile,
   parseModule,
   relativeFilePath,
   resolveProjectFiles
 } from "./shared.js";
 
+export function detectProjectType(projectRoot: string): "nextjs" | "expo" | "react" {
+  const packageJsonPath = path.join(projectRoot, "package.json");
+  if (!fs.existsSync(packageJsonPath)) {
+    return "react";
+  }
+
+  const pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  };
+  const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
+
+  if (deps.expo) {
+    return "expo";
+  }
+  if (deps.next) {
+    return "nextjs";
+  }
+  return "react";
+}
+
 export function findPages(projectRoot: string): PageNode[] {
   const pages: PageNode[] = [];
 
-  for (const filePath of resolveProjectFiles(projectRoot, PAGE_GLOBS)) {
+  for (const filePath of resolveProjectFiles(projectRoot, TS_GLOBS)) {
     try {
       const module = parseModule(filePath);
       const relativePath = relativeFilePath(projectRoot, filePath);
+      if (!isPageLikeFile(relativePath, module)) {
+        continue;
+      }
+
       const fallbackName = path.basename(filePath, path.extname(filePath)) === "page"
         ? inferAnonymousExportName(filePath)
         : path.basename(filePath, path.extname(filePath));

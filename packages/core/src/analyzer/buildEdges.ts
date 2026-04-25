@@ -6,6 +6,7 @@ import {
   createNodeId,
   dedupeBy,
   inferTypeFromExpression,
+  isFrameworkReservedFile,
   isHookName,
   parseModule,
   relativeFilePath,
@@ -16,6 +17,7 @@ import {
 
 interface NodeLookup {
   pagesByFile: Map<string, PageNode>;
+  pagesByName: Map<string, PageNode>;
   componentsByFile: Map<string, ComponentNode>;
   componentsByName: Map<string, ComponentNode>;
   hooksByFile: Map<string, HookNode>;
@@ -40,6 +42,7 @@ function buildLookup(
 ): NodeLookup {
   return {
     pagesByFile: new Map(pages.map((page) => [page.filePath, page])),
+    pagesByName: new Map(pages.map((page) => [page.name, page])),
     componentsByFile: new Map(components.map((component) => [component.filePath, component])),
     componentsByName: new Map(components.map((component) => [component.name, component])),
     hooksByFile: new Map(hooks.map((hook) => [hook.filePath, hook])),
@@ -151,6 +154,21 @@ function getStringValue(node: TSESTree.Node | undefined, source: string): string
   return undefined;
 }
 
+function getEndpointValue(node: TSESTree.Node | undefined, source: string): string | undefined {
+  if (!node) {
+    return undefined;
+  }
+
+  if (node.type === "TemplateLiteral") {
+    const cooked = node.quasis.map((quasi) => quasi.value.cooked ?? "").join("");
+    if (node.expressions.length > 0 && cooked.startsWith("/")) {
+      return cooked;
+    }
+  }
+
+  return getStringValue(node, source);
+}
+
 function getFetchMethod(node: TSESTree.CallExpression): ApiNode["method"] {
   const optionsArg = node.arguments[1];
   if (optionsArg?.type !== "ObjectExpression") {
@@ -180,7 +198,7 @@ function collectApiCall(
   source: string
 ): { endpoint: string; method: ApiNode["method"] } | undefined {
   if (node.callee.type === "Identifier" && node.callee.name === "fetch") {
-    const endpoint = getStringValue(node.arguments[0] as TSESTree.Node | undefined, source);
+    const endpoint = getEndpointValue(node.arguments[0] as TSESTree.Node | undefined, source);
     if (endpoint) {
       return { endpoint, method: getFetchMethod(node) };
     }
@@ -193,7 +211,7 @@ function collectApiCall(
   ) {
     const method = node.callee.property.name.toUpperCase();
     if (method === "GET" || method === "POST" || method === "PUT" || method === "DELETE") {
-      const endpoint = getStringValue(node.arguments[0] as TSESTree.Node | undefined, source);
+      const endpoint = getEndpointValue(node.arguments[0] as TSESTree.Node | undefined, source);
       if (endpoint) {
         return { endpoint, method: method as ApiNode["method"] };
       }
@@ -201,7 +219,7 @@ function collectApiCall(
   }
 
   if (node.callee.type === "Identifier" && node.callee.name === "useSWR") {
-    const endpoint = getStringValue(node.arguments[0] as TSESTree.Node | undefined, source);
+    const endpoint = getEndpointValue(node.arguments[0] as TSESTree.Node | undefined, source);
     if (endpoint) {
       return { endpoint, method: "GET" };
     }
@@ -217,7 +235,7 @@ function collectApiCall(
         }
 
         if (nested.callee.type === "Identifier" && nested.callee.name === "fetch") {
-          endpoint = getStringValue(nested.arguments[0] as TSESTree.Node | undefined, source);
+          endpoint = getEndpointValue(nested.arguments[0] as TSESTree.Node | undefined, source);
         }
       });
 
@@ -245,22 +263,58 @@ function isSharedPath(filePath: string): boolean {
   return filePath.includes("/shared/") || filePath.includes("\\shared\\");
 }
 
-function isNextjsReservedFile(filePath: string): boolean {
-  const reserved = [
-    "layout.tsx",
-    "layout.ts",
-    "error.tsx",
-    "error.ts",
-    "loading.tsx",
-    "loading.ts",
-    "not-found.tsx",
-    "not-found.ts",
-    "template.tsx",
-    "template.ts",
-    "middleware.ts",
-    "middleware.tsx"
-  ];
-  return reserved.some((name) => filePath.endsWith(name));
+function normalizeRouteSegment(value: string): string {
+  return value.replace(/^\//, "").replace(/\.(tsx?|jsx?)$/, "").replace(/[\[\]()]/g, "").toLowerCase();
+}
+
+function findPageByRoute(pathname: string, pages: PageNode[]): PageNode | undefined {
+  const normalizedRoute = normalizeRouteSegment(pathname);
+  if (!normalizedRoute) {
+    return pages.find((page) => /(?:^|\/)(index|page)\.tsx?$/.test(page.filePath));
+  }
+
+  return pages.find((page) => {
+    const normalizedPath = page.filePath
+      .replace(/\\/g, "/")
+      .replace(/^src\//, "")
+      .replace(/\.(tsx?|jsx?)$/, "")
+      .replace(/\/(page|index)$/, "")
+      .replace(/^app\//, "")
+      .replace(/^pages\//, "")
+      .replace(/^screens\//, "")
+      .replace(/^views\//, "")
+      .replace(/^routes\//, "")
+      .toLowerCase();
+
+    return normalizedPath === normalizedRoute || normalizedPath.endsWith(`/${normalizedRoute}`);
+  });
+}
+
+function findScreenComponentByName(name: string, lookup: NodeLookup): ComponentNode | undefined {
+  const normalized = name.toLowerCase();
+  return (
+    lookup.componentsByName.get(name) ??
+    Array.from(lookup.componentsByFile.values()).find((component) => {
+      const baseName = path.basename(component.filePath, path.extname(component.filePath)).toLowerCase();
+      return (
+        component.name.toLowerCase() === normalized ||
+        baseName === normalized ||
+        baseName === `${normalized}screen`
+      );
+    })
+  );
+}
+
+function findNavigationTarget(name: string, lookup: NodeLookup): PageNode | ComponentNode | undefined {
+  const normalized = name.toLowerCase();
+  return (
+    lookup.pagesByName.get(name) ??
+    Array.from(lookup.pagesByFile.values()).find((page) => {
+      const baseName = path.basename(page.filePath, path.extname(page.filePath)).toLowerCase();
+      return page.name.toLowerCase() === normalized || baseName === normalized || baseName === `${normalized}screen`;
+    }) ??
+    findScreenComponentByName(name, lookup)
+  );
 }
 
 function buildComponentUsageMap(pages: PageNode[], components: ComponentNode[], seeds: EdgeSeed[]): ReachabilityMap {
@@ -504,22 +558,95 @@ export function buildEdges(
 
       if (node.type === "CallExpression") {
         const apiCall = collectApiCall(node, module.source);
-        if (!apiCall) {
-          return;
+        if (apiCall) {
+          const api = lookup.apisByEndpoint.get(apiCall.endpoint) ?? {
+            id: createNodeId("api", `${apiCall.method}:${apiCall.endpoint}`),
+            endpoint: apiCall.endpoint,
+            method: apiCall.method,
+            type: "api" as const
+          };
+
+          seeds.push({
+            source: owner.id,
+            target: api.id,
+            relationshipType: "calls"
+          });
         }
+      }
 
-        const api = lookup.apisByEndpoint.get(apiCall.endpoint) ?? {
-          id: createNodeId("api", `${apiCall.method}:${apiCall.endpoint}`),
-          endpoint: apiCall.endpoint,
-          method: apiCall.method,
-          type: "api" as const
-        };
+      if (
+        node.type === "JSXOpeningElement" &&
+        getJsxTagName(node.name) === "Link"
+      ) {
+        const hrefAttribute = node.attributes.find(
+          (attribute) =>
+            attribute.type === "JSXAttribute" &&
+            attribute.name.type === "JSXIdentifier" &&
+            attribute.name.name === "href"
+        );
+        const href =
+          hrefAttribute && hrefAttribute.type === "JSXAttribute"
+            ? getStringValue(
+                hrefAttribute.value?.type === "JSXExpressionContainer"
+                  ? hrefAttribute.value.expression
+                  : hrefAttribute.value ?? undefined,
+                module.source
+              )
+            : undefined;
+        const targetPage = href ? findPageByRoute(href, pages) : undefined;
+        if (targetPage && targetPage.id !== owner.id) {
+          seeds.push({
+            source: owner.id,
+            target: targetPage.id,
+            relationshipType: "navigates"
+          });
+        }
+        return;
+      }
 
-        seeds.push({
-          source: owner.id,
-          target: api.id,
-          relationshipType: "calls"
-        });
+      if (
+        node.type === "CallExpression" &&
+        node.callee.type === "MemberExpression" &&
+        node.callee.property.type === "Identifier" &&
+        node.callee.property.name === "navigate"
+      ) {
+        const screenName = getStringValue(node.arguments[0] as TSESTree.Node | undefined, module.source);
+        const targetNode = screenName ? findNavigationTarget(screenName, lookup) : undefined;
+        if (targetNode && targetNode.id !== owner.id) {
+          seeds.push({
+            source: owner.id,
+            target: targetNode.id,
+            relationshipType: "navigates"
+          });
+        }
+        return;
+      }
+
+      if (
+        node.type === "JSXOpeningElement" &&
+        node.name.type === "JSXMemberExpression" &&
+        node.name.property.name === "Screen"
+      ) {
+        const componentAttribute = node.attributes.find(
+          (attribute) =>
+            attribute.type === "JSXAttribute" &&
+            attribute.name.type === "JSXIdentifier" &&
+            attribute.name.name === "component"
+        );
+        if (
+          componentAttribute?.type === "JSXAttribute" &&
+          componentAttribute.value?.type === "JSXExpressionContainer" &&
+          componentAttribute.value.expression.type === "Identifier"
+        ) {
+          const targetComponent = findScreenComponentByName(componentAttribute.value.expression.name, lookup);
+          if (targetComponent && targetComponent.id !== owner.id) {
+            seeds.push({
+              source: owner.id,
+              target: targetComponent.id,
+              relationshipType: "renders"
+            });
+          }
+        }
       }
     });
   }
@@ -530,7 +657,7 @@ export function buildEdges(
   const allPageIds = pages.map((page) => page.id);
 
   for (const component of components) {
-    const isReserved = isNextjsReservedFile(component.filePath);
+    const isReserved = isFrameworkReservedFile(component.filePath);
     const usedByPages = isReserved ? allPageIds : Array.from(usageByComponentId.get(component.id) ?? []);
     const usageCount = usedByPages.length;
     const shouldMoveToShared = usageCount >= 2 && !isSharedPath(component.filePath);
