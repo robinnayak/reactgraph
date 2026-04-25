@@ -41,6 +41,26 @@ const REACT_NATIVE_HOOK_INDICATORS = new Set([
   "useRoute",
   "useFocusEffect"
 ]);
+const RESERVED_ROUTE_FILES = new Set([
+  "layout.tsx",
+  "layout.ts",
+  "error.tsx",
+  "error.ts",
+  "loading.tsx",
+  "loading.ts",
+  "not-found.tsx",
+  "not-found.ts",
+  "template.tsx",
+  "template.ts",
+  "middleware.ts",
+  "middleware.tsx",
+  "route.ts",
+  "route.tsx",
+  "_layout.tsx",
+  "_layout.ts",
+  "+not-found.tsx",
+  "+html.tsx"
+]);
 
 export function resolveProjectFiles(projectRoot: string, patterns: string[]): string[] {
   return (patterns ?? []).flatMap((pattern) =>
@@ -369,28 +389,7 @@ export function isLikelyComponentName(name: string): boolean {
 
 export function isFrameworkReservedFile(filePath: string): boolean {
   const normalized = filePath.replace(/\\/g, "/");
-  const reserved = [
-    "layout.tsx",
-    "layout.ts",
-    "error.tsx",
-    "error.ts",
-    "loading.tsx",
-    "loading.ts",
-    "not-found.tsx",
-    "not-found.ts",
-    "template.tsx",
-    "template.ts",
-    "middleware.ts",
-    "middleware.tsx",
-    "_layout.tsx",
-    "_layout.ts",
-    "+not-found.tsx",
-    "+html.tsx",
-    "App.tsx",
-    "App.ts",
-    "index.tsx",
-    "index.ts"
-  ];
+  const reserved = [...RESERVED_ROUTE_FILES, "App.tsx", "App.ts", "index.tsx", "index.ts"];
 
   return reserved.some((name) => normalized.endsWith(name) || normalized.endsWith(`/${name}`));
 }
@@ -457,34 +456,24 @@ export function isPageLikeFile(relativePath: string, module?: ParsedModule): boo
   const baseName = path.basename(normalized, path.extname(normalized));
   const parent = segments.at(-2)?.toLowerCase();
   const hasDefaultExport = module ? hasDefaultComponentExport(module) : false;
+  const isInsideAppRouter = /(^|\/)app\//.test(normalized);
+  const isInsidePagesRouter = /(^|\/)pages\//.test(normalized);
+  const isInsideScreenLikeFolder = /(^|\/)(screens|views|routes)\//.test(normalized);
 
-  if (
-    [
-      "layout.tsx",
-      "layout.ts",
-      "error.tsx",
-      "error.ts",
-      "loading.tsx",
-      "loading.ts",
-      "not-found.tsx",
-      "not-found.ts",
-      "template.tsx",
-      "template.ts",
-      "middleware.ts",
-      "middleware.tsx",
-      "_layout.tsx",
-      "_layout.ts",
-      "+not-found.tsx",
-      "+html.tsx"
-    ].some((name) => normalized.endsWith(name) || normalized.endsWith(`/${name}`))
-  ) {
+  if ([...RESERVED_ROUTE_FILES].some((name) => normalized.endsWith(name) || normalized.endsWith(`/${name}`))) {
     return false;
   }
 
-  if (
-    /(^|\/)(pages|screens|app|views|routes)\//.test(normalized) ||
-    /(?:Page|Screen|View|Route)\.tsx?$/.test(fileName)
-  ) {
+  // Next.js App Router pages must be explicit page.* files.
+  if (isInsideAppRouter) {
+    return /(^|\/)page\.(tsx|ts|jsx|js)$/.test(normalized);
+  }
+
+  if (isInsidePagesRouter) {
+    return true;
+  }
+
+  if (isInsideScreenLikeFolder || /(?:Page|Screen|View|Route)\.tsx?$/.test(fileName)) {
     return true;
   }
 

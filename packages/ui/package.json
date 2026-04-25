@@ -8,8 +8,8 @@
   },
   "type": "module",
   "scripts": {
-    "build": "vite build",
-    "dev": "vite",
+    "build": "node scripts/build.mjs",
+    "dev": "vite --configLoader runner",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {

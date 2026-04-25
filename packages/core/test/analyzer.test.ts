@@ -55,6 +55,25 @@ describe("core analyzer", () => {
     expect(pages.map((page) => page.filePath)).toContain("app/dashboard/page.tsx");
   });
 
+  it("does not classify app router utility or framework support files as pages", () => {
+    const root = makeProject({
+      "app/(dashboard)/dashboard/page.tsx": "export default function DashboardPage() { return <main />; }",
+      "app/(dashboard)/dashboard/utils/dashboard.utils.ts": "export const formatDashboard = () => 'ok';",
+      "app/(dashboard)/dashboard/layout.tsx": "export default function Layout({ children }: { children: React.ReactNode }) { return <>{children}</>; }",
+      "app/(dashboard)/dashboard/loading.tsx": "export default function Loading() { return <div />; }",
+      "app/(dashboard)/dashboard/error.tsx": "export default function ErrorBoundary() { return <div />; }",
+      "app/(dashboard)/dashboard/route.ts": "export async function GET() { return Response.json({ ok: true }); }"
+    });
+
+    const pages = findPages(root);
+
+    expect(pages).toHaveLength(1);
+    expect(pages[0]).toMatchObject({
+      name: "DashboardPage",
+      filePath: "app/(dashboard)/dashboard/page.tsx"
+    });
+  });
+
   it("extracts component props, hooks, apis, and edges", async () => {
     const root = makeProject({
       "pages/dashboard.tsx": `
@@ -102,6 +121,43 @@ describe("core analyzer", () => {
     expect(graph.edges.some((edge) => edge.relationshipType === "uses")).toBe(true);
     expect(graph.edges.some((edge) => edge.relationshipType === "calls")).toBe(true);
     expect(fs.existsSync(path.join(root, "reactgraph.json"))).toBe(true);
+  });
+
+  it("preserves dependency traversal for app router pages", async () => {
+    const root = makeProject({
+      "app/dashboard/page.tsx": `
+        import { DashboardShell } from "../../components/DashboardShell";
+        export default function DashboardPage() {
+          return <DashboardShell />;
+        }
+      `,
+      "components/DashboardShell.tsx": `
+        import { StatsGrid } from "./StatsGrid";
+        import { useDashboard } from "../hooks/useDashboard";
+        export function DashboardShell() {
+          useDashboard();
+          return <StatsGrid />;
+        }
+      `,
+      "components/StatsGrid.tsx": `
+        export function StatsGrid() {
+          return <section>Stats</section>;
+        }
+      `,
+      "hooks/useDashboard.ts": `
+        export function useDashboard() {
+          return fetch("/api/dashboard");
+        }
+      `
+    });
+
+    const graph = await analyze(root, { writeJson: false });
+    const page = graph.pages.find((entry) => entry.filePath === "app/dashboard/page.tsx");
+
+    expect(page).toBeDefined();
+    expect(graph.edges.some((edge) => edge.source === page?.id && edge.relationshipType === "renders")).toBe(true);
+    expect(graph.edges.some((edge) => edge.relationshipType === "uses")).toBe(true);
+    expect(graph.edges.some((edge) => edge.relationshipType === "calls")).toBe(true);
   });
 
   it("finds components without props safely", () => {

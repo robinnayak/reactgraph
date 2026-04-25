@@ -197,7 +197,7 @@ export default function NodeInspector({
   return (
     <aside className="inspector">
       <div className="inspector__header">
-        <div>
+        <div className="inspector__header-content">
           <div className="inspector__title" style={ellipsisStyle} title={node.name}>
             {node.name}
           </div>

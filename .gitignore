@@ -6,3 +6,4 @@ coverage
 *.tsbuildinfo
 reactgraph.json
 demo-ui/
+packages/core/.npm-global/

@@ -3,7 +3,7 @@
   "publisher": "reactgraph",
   "displayName": "ReactGraph",
   "description": "Visualize your React/Next.js component hierarchy, hooks, and API connections",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "main": "dist/extension.js",
   "icon": "assets/icon.png",
@@ -49,7 +49,7 @@
     "build": "esbuild src/extension.ts src/healthCheckWorker.ts --bundle --outdir=dist --external:vscode --external:fsevents --platform=node --target=node18 --format=cjs --minify --tree-shaking=true --legal-comments=none",
     "postbuild": "node scripts/copy-ui.js",
     "dev": "tsc -p tsconfig.json --watch",
-    "package": "npm run build && npx @vscode/vsce package --no-dependencies"
+    "package": "npm run build && node scripts/package-vsix.js"
   },
   "devDependencies": {
     "@reactgraph-ui/core": "^0.1.2",

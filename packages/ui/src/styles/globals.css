@@ -324,13 +324,17 @@ input {
   z-index: 20;
   display: flex;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 1rem;
+  min-width: 0;
   pointer-events: none;
 }
 
 .toolbar__section {
   display: flex;
   gap: 0.5rem;
+  min-width: 0;
+  overflow-x: auto;
   padding: 0.45rem;
   border-radius: 0.95rem;
   background: rgba(28, 32, 38, 0.74);
@@ -348,6 +352,7 @@ input {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
+  flex-shrink: 0;
 }
 
 .toolbar button:hover,
@@ -384,14 +389,21 @@ input {
 
 .graph-shell {
   min-height: 100vh;
+  padding-left: 1rem;
+  overflow: visible;
   background:
     radial-gradient(circle, rgba(67, 70, 85, 0.52) 1px, transparent 1px);
   background-size: 30px 30px;
   background-position: center;
 }
 
+.graph-shell .react-flow {
+  overflow: visible;
+}
+
 .graph-shell .react-flow__renderer {
   background: transparent;
+  overflow: visible;
 }
 
 .graph-node {
@@ -823,8 +835,13 @@ input {
 .inspector__header {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
-  align-items: flex-start;
+  gap: 8px;
+  align-items: center;
+}
+
+.inspector__header-content {
+  flex: 1;
+  min-width: 0;
 }
 
 .inspector__header button,
@@ -844,6 +861,11 @@ input {
 .inspector__title {
   font-size: 1rem;
   font-weight: 800;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .inspector__path {
