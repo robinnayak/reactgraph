@@ -3,7 +3,7 @@
   "publisher": "reactgraph",
   "displayName": "ReactGraph",
   "description": "Visualize your React/Next.js component hierarchy, hooks, and API connections",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "private": true,
   "main": "dist/extension.js",
   "icon": "assets/icon.png",

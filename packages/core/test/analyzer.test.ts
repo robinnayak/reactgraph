@@ -334,6 +334,101 @@ describe("core analyzer", () => {
     expect(component?.usedInPages).toEqual([]);
   });
 
+  it("does not mark a navigation-registered screen as unused", async () => {
+    const root = makeProject({
+      "App.tsx": `
+        import { createNativeStackNavigator } from "@react-navigation/native-stack";
+        import HomeScreen from "./screens/HomeScreen";
+
+        const Stack = createNativeStackNavigator();
+
+        export default function App() {
+          return (
+            <Stack.Navigator>
+              <Stack.Screen name="Home" component={HomeScreen} />
+            </Stack.Navigator>
+          );
+        }
+      `,
+      "screens/HomeScreen.tsx": `
+        export default function HomeScreen() {
+          return <View />;
+        }
+      `
+    });
+
+    const graph = await analyze(root, { writeJson: false });
+    const homeScreen = graph.components.find((entry) => entry.filePath === "screens/HomeScreen.tsx");
+
+    expect(homeScreen).toMatchObject({
+      isUnused: false
+    });
+  });
+
+  it("does not mark a barrel re-exported provider as unused", async () => {
+    const root = makeProject({
+      "App.tsx": `
+        import { AdsProvider } from "./src/ads";
+
+        export default function App() {
+          return <AdsProvider />;
+        }
+      `,
+      "src/ads/index.ts": `
+        export { AdsProvider } from "./AdsContext";
+      `,
+      "src/ads/AdsContext.tsx": `
+        export function AdsProvider() {
+          return <View />;
+        }
+      `
+    });
+
+    const graph = await analyze(root, { writeJson: false });
+    const adsProvider = graph.components.find((entry) => entry.filePath === "src/ads/AdsContext.tsx");
+
+    expect(adsProvider).toMatchObject({
+      isUnused: false
+    });
+  });
+
+  it("does not mark a provider rendered from App.tsx as unused", async () => {
+    const root = makeProject({
+      "App.tsx": `
+        import { InterviewProvider } from "./contexts/InterviewContext";
+
+        export default function App() {
+          return (
+            <InterviewProvider>
+              <View />
+            </InterviewProvider>
+          );
+        }
+      `,
+      "contexts/InterviewContext.tsx": `
+        export function InterviewProvider({ children }: { children?: React.ReactNode }) {
+          return <>{children}</>;
+        }
+      `,
+      "components/UnusedWidget.tsx": `
+        export function UnusedWidget() {
+          return <aside>Unused</aside>;
+        }
+      `
+    });
+
+    const graph = await analyze(root, { writeJson: false });
+    const provider = graph.components.find((entry) => entry.filePath === "contexts/InterviewContext.tsx");
+    const unusedWidget = graph.components.find((entry) => entry.filePath === "components/UnusedWidget.tsx");
+
+    expect(provider).toMatchObject({
+      isUnused: false
+    });
+    expect(unusedWidget).toMatchObject({
+      isUnused: true
+    });
+  });
+
   it("detects a circular dependency between two components", async () => {
     const root = makeProject({
       "components/ComponentA.tsx": `

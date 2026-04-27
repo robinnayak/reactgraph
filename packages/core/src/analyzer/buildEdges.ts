@@ -34,6 +34,17 @@ interface EdgeSeed {
 
 type ReachabilityMap = Map<string, Set<string>>;
 
+interface ImportBinding {
+  localName: string;
+  importSource: string;
+  importedName: string;
+}
+
+interface ResolvedImportUsage {
+  componentIds: string[];
+  viaBarrel: boolean;
+}
+
 function buildLookup(
   pages: PageNode[],
   components: ComponentNode[],
@@ -49,6 +60,148 @@ function buildLookup(
     hooksByName: new Map(hooks.map((hook) => [hook.name, hook])),
     apisByEndpoint: new Map(apis.map((api) => [api.endpoint, api]))
   };
+}
+
+function getImportBindings(module: ReturnType<typeof parseModule>): ImportBinding[] {
+  const bindings: ImportBinding[] = [];
+
+  for (const statement of (module.ast as TSESTree.Program).body) {
+    if (statement.type !== "ImportDeclaration" || typeof statement.source.value !== "string") {
+      continue;
+    }
+
+    for (const specifier of statement.specifiers) {
+      if (specifier.type === "ImportSpecifier") {
+        bindings.push({
+          localName: specifier.local.name,
+          importSource: statement.source.value,
+          importedName: specifier.imported.type === "Identifier" ? specifier.imported.name : specifier.imported.value
+        });
+        continue;
+      }
+
+      if (specifier.type === "ImportDefaultSpecifier") {
+        bindings.push({
+          localName: specifier.local.name,
+          importSource: statement.source.value,
+          importedName: "default"
+        });
+      }
+    }
+  }
+
+  return bindings;
+}
+
+function isBarrelFile(filePath: string): boolean {
+  return /(?:^|[\\/])index\.(ts|tsx)$/.test(filePath);
+}
+
+function collectExportedNamesFromDeclaration(declaration: TSESTree.Node): string[] {
+  if (declaration.type === "VariableDeclaration") {
+    return declaration.declarations.flatMap((entry) => (entry.id.type === "Identifier" ? [entry.id.name] : []));
+  }
+
+  if ("id" in declaration && declaration.id?.type === "Identifier") {
+    return [declaration.id.name];
+  }
+
+  return [];
+}
+
+function resolveImportTargets(
+  fromFile: string,
+  importSource: string,
+  importedName: string,
+  lookup: NodeLookup,
+  projectRoot: string,
+  cache: Map<string, ResolvedImportUsage>
+): ResolvedImportUsage {
+  if (!importSource.startsWith(".")) {
+    return { componentIds: [], viaBarrel: false };
+  }
+
+  const cacheKey = `${fromFile}::${importSource}::${importedName}`;
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const resolvedFile = resolveImportToFile(fromFile, importSource);
+  if (!resolvedFile) {
+    const empty = { componentIds: [], viaBarrel: false };
+    cache.set(cacheKey, empty);
+    return empty;
+  }
+
+  const directComponent = lookup.componentsByFile.get(relativeFilePath(projectRoot, resolvedFile));
+  if (!isBarrelFile(resolvedFile)) {
+    const direct = { componentIds: directComponent ? [directComponent.id] : [], viaBarrel: false };
+    cache.set(cacheKey, direct);
+    return direct;
+  }
+
+  const resolvedComponentIds = new Set<string>();
+  let resolvedViaBarrel = false;
+
+  try {
+    const barrelModule = parseModule(resolvedFile);
+    for (const statement of (barrelModule.ast as TSESTree.Program).body) {
+      if (statement.type === "ExportNamedDeclaration" && statement.declaration) {
+        const declaredNames = collectExportedNamesFromDeclaration(statement.declaration);
+        if (importedName === "default" ? barrelModule.defaultExportName != null : declaredNames.includes(importedName)) {
+          if (directComponent) {
+            resolvedComponentIds.add(directComponent.id);
+          }
+        }
+        continue;
+      }
+
+      if (
+        statement.type === "ExportNamedDeclaration" &&
+        statement.source &&
+        typeof statement.source.value === "string"
+      ) {
+        for (const specifier of statement.specifiers) {
+          const exportedName =
+            specifier.exported.type === "Identifier" ? specifier.exported.name : specifier.exported.value;
+          if (exportedName !== importedName) {
+            continue;
+          }
+
+          resolvedViaBarrel = true;
+          const reexportedName =
+            specifier.local.type === "Identifier"
+              ? specifier.local.name
+              : specifier.local.type === "Literal"
+                ? String(specifier.local.value)
+                : "default";
+          const nested = resolveImportTargets(
+            resolvedFile,
+            statement.source.value,
+            reexportedName,
+            lookup,
+            projectRoot,
+            cache
+          );
+          nested.componentIds.forEach((componentId) => resolvedComponentIds.add(componentId));
+        }
+      }
+    }
+  } catch {
+    // Ignore barrel parse failures and fall back to the barrel file itself when possible.
+  }
+
+  if (resolvedComponentIds.size === 0 && directComponent) {
+    resolvedComponentIds.add(directComponent.id);
+  }
+
+  const resolved = {
+    componentIds: Array.from(resolvedComponentIds),
+    viaBarrel: resolvedViaBarrel
+  };
+  cache.set(cacheKey, resolved);
+  return resolved;
 }
 
 function getJsxTagName(name: TSESTree.JSXTagNameExpression): string | undefined {
@@ -350,6 +503,36 @@ function buildComponentUsageMap(pages: PageNode[], components: ComponentNode[], 
   return usageByComponentId;
 }
 
+function buildRenderReachability(rootIds: string[], components: ComponentNode[], seeds: EdgeSeed[]): Set<string> {
+  const reachable = new Set<string>();
+  const componentById = new Set(components.map((component) => component.id));
+  const childComponentsByParentId = new Map<string, string[]>();
+
+  for (const seed of seeds) {
+    if (seed.relationshipType !== "renders" || !componentById.has(seed.target)) {
+      continue;
+    }
+
+    const children = childComponentsByParentId.get(seed.source) ?? [];
+    children.push(seed.target);
+    childComponentsByParentId.set(seed.source, children);
+  }
+
+  const visit = (ownerId: string) => {
+    for (const componentId of childComponentsByParentId.get(ownerId) ?? []) {
+      if (reachable.has(componentId)) {
+        continue;
+      }
+
+      reachable.add(componentId);
+      visit(componentId);
+    }
+  };
+
+  rootIds.forEach((rootId) => visit(rootId));
+  return reachable;
+}
+
 function getCanonicalCycleIds(cycleIds: string[]): string[] {
   const uniqueCycle = cycleIds.slice(0, -1);
   const rotations = uniqueCycle.map((_, index) => {
@@ -504,6 +687,9 @@ export function buildEdges(
   const root = projectRoot ?? process.cwd();
   const lookup = buildLookup(pages, components, hooks, apis);
   const seeds: EdgeSeed[] = [];
+  const importResolutionCache = new Map<string, ResolvedImportUsage>();
+  const identifierUsageByComponentId = new Set<string>();
+  const barrelUsageByComponentId = new Set<string>();
 
   for (const filePath of resolveProjectFiles(root, TS_GLOBS)) {
     const module = parseModule(filePath);
@@ -513,7 +699,49 @@ export function buildEdges(
       continue;
     }
 
-    traverse(module.ast, (node) => {
+    const importBindings = getImportBindings(module);
+    const resolvedBindings = new Map<string, ResolvedImportUsage>();
+    for (const binding of importBindings) {
+      const existing = resolvedBindings.get(binding.localName);
+      const resolved = resolveImportTargets(
+        filePath,
+        binding.importSource,
+        binding.importedName,
+        lookup,
+        root,
+        importResolutionCache
+      );
+
+      if (existing) {
+        resolved.componentIds.forEach((componentId) => {
+          if (!existing.componentIds.includes(componentId)) {
+            existing.componentIds.push(componentId);
+          }
+        });
+        existing.viaBarrel ||= resolved.viaBarrel;
+      } else if (resolved.componentIds.length > 0) {
+        resolvedBindings.set(binding.localName, {
+          componentIds: [...resolved.componentIds],
+          viaBarrel: resolved.viaBarrel
+        });
+      }
+    }
+
+    const markIdentifierUsage = (identifierName: string) => {
+      const resolved = resolvedBindings.get(identifierName);
+      if (!resolved) {
+        return;
+      }
+
+      resolved.componentIds.forEach((componentId) => {
+        identifierUsageByComponentId.add(componentId);
+        if (resolved.viaBarrel) {
+          barrelUsageByComponentId.add(componentId);
+        }
+      });
+    };
+
+    traverse(module.ast, (node, parent) => {
       if (node.type === "JSXOpeningElement") {
         const component = getTargetComponentFromJsx(node, module.imports, filePath, lookup, root);
         if (!component || component.id === owner.id) {
@@ -526,6 +754,64 @@ export function buildEdges(
           relationshipType: "renders",
           props: propsFromJsx(node, module.source)
         });
+      }
+
+      if (
+        node.type === "JSXAttribute" &&
+        node.value?.type === "JSXExpressionContainer" &&
+        node.value.expression.type === "Identifier"
+      ) {
+        markIdentifierUsage(node.value.expression.name);
+      }
+
+      if (
+        node.type === "JSXExpressionContainer" &&
+        node.expression.type === "Identifier"
+      ) {
+        markIdentifierUsage(node.expression.name);
+      }
+
+      if (node.type === "CallExpression") {
+        for (const argument of node.arguments) {
+          if (argument.type === "Identifier") {
+            markIdentifierUsage(argument.name);
+          }
+        }
+      }
+
+      if (node.type === "SpreadElement" && node.argument.type === "Identifier") {
+        markIdentifierUsage(node.argument.name);
+      }
+
+      if (
+        node.type === "VariableDeclarator" &&
+        node.id.type === "Identifier" &&
+        node.init?.type === "Identifier"
+      ) {
+        markIdentifierUsage(node.init.name);
+        const resolved = resolvedBindings.get(node.init.name);
+        if (resolved) {
+          resolvedBindings.set(node.id.name, {
+            componentIds: [...resolved.componentIds],
+            viaBarrel: resolved.viaBarrel
+          });
+        }
+      }
+
+      if (
+        node.type === "Identifier" &&
+        parent?.type !== "ImportSpecifier" &&
+        parent?.type !== "ImportDefaultSpecifier" &&
+        parent?.type !== "ImportNamespaceSpecifier" &&
+        parent?.type !== "ImportDeclaration" &&
+        parent?.type !== "ExportSpecifier" &&
+        !(parent?.type === "VariableDeclarator" && parent.id === node) &&
+        !(parent?.type === "FunctionDeclaration" && parent.id === node) &&
+        !(parent?.type === "ClassDeclaration" && parent.id === node) &&
+        !(parent?.type === "Property" && parent.key === node && !parent.computed) &&
+        !(parent?.type === "MemberExpression" && parent.property === node && !parent.computed)
+      ) {
+        markIdentifierUsage(node.name);
       }
 
       if (node.type === "CallExpression" && node.callee.type === "Identifier" && isHookName(node.callee.name)) {
@@ -652,6 +938,14 @@ export function buildEdges(
   }
 
   const usageByComponentId = buildComponentUsageMap(pages, components, seeds);
+  const entryOwnerIds = components
+    .filter((component) => isFrameworkReservedFile(component.filePath))
+    .map((component) => component.id);
+  const renderReachableComponentIds = buildRenderReachability(
+    [...pages.map((page) => page.id), ...entryOwnerIds],
+    components,
+    seeds
+  );
   const circularDependenciesByComponentId = detectCircularDependencies(components, seeds);
   const propDrillingByComponentId = detectPropDrilling(pages, components, seeds);
   const allPageIds = pages.map((page) => page.id);
@@ -661,7 +955,14 @@ export function buildEdges(
     const usedByPages = isReserved ? allPageIds : Array.from(usageByComponentId.get(component.id) ?? []);
     const usageCount = usedByPages.length;
     const shouldMoveToShared = usageCount >= 2 && !isSharedPath(component.filePath);
-    const isUnused = !isReserved && usageCount === 0;
+    const isReferencedAsJsx = renderReachableComponentIds.has(component.id);
+    const isReferencedAsIdentifier = identifierUsageByComponentId.has(component.id);
+    const isReferencedThroughBarrel = barrelUsageByComponentId.has(component.id);
+    const isUnused =
+      !isReferencedAsJsx &&
+      !isReferencedAsIdentifier &&
+      !isReferencedThroughBarrel &&
+      !isReserved;
 
     component.usedInPages = usedByPages;
     component.usageCount = usageCount;

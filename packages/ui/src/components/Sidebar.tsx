@@ -19,6 +19,7 @@ interface HealthSectionConfig {
   title: string;
   colorClass: string;
   accentClass: string;
+  emptyMessage: string;
   items: ComponentNode[];
   icon?: string;
   getDetail?: (component: ComponentNode) => string | null;
@@ -27,6 +28,7 @@ interface HealthSectionConfig {
 function HealthSection(props: {
   accentClass: string;
   colorClass: string;
+  emptyMessage: string;
   getDetail?: (component: ComponentNode) => string | null;
   icon?: string;
   isOpen: boolean;
@@ -36,7 +38,7 @@ function HealthSection(props: {
   selectedNodeId: string | null;
   title: string;
 }) {
-  const { accentClass, colorClass, getDetail, icon, isOpen, items, onItemClick, onToggle, selectedNodeId, title } = props;
+  const { accentClass, colorClass, emptyMessage, getDetail, icon, isOpen, items, onItemClick, onToggle, selectedNodeId, title } = props;
   const ellipsisStyle = {
     whiteSpace: "nowrap",
     overflow: "hidden",
@@ -53,32 +55,36 @@ function HealthSection(props: {
       </button>
       {isOpen ? (
         <div className="sidebar__section-list">
-          {items.map((component) => (
-            <button
-              className={`sidebar__health-item${selectedNodeId === component.id ? ` is-active ${accentClass}` : ""}`}
-              key={component.id}
-              onClick={() => onItemClick(component.id)}
-              type="button"
-            >
-              <span className={`dot ${colorClass}`} />
-              <span className="sidebar__health-content">
-                <span className="sidebar__health-row">
-                  <span className="sidebar__health-name" style={ellipsisStyle} title={component.name}>
-                    {component.name}
+          {items.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-gray-500">{emptyMessage}</p>
+          ) : (
+            items.map((component) => (
+              <button
+                className={`sidebar__health-item${selectedNodeId === component.id ? ` is-active ${accentClass}` : ""}`}
+                key={component.id}
+                onClick={() => onItemClick(component.id)}
+                type="button"
+              >
+                <span className={`dot ${colorClass}`} />
+                <span className="sidebar__health-content">
+                  <span className="sidebar__health-row">
+                    <span className="sidebar__health-name" style={ellipsisStyle} title={component.name}>
+                      {component.name}
+                    </span>
+                    {icon ? <span className="sidebar__health-icon">{icon}</span> : null}
                   </span>
-                  {icon ? <span className="sidebar__health-icon">{icon}</span> : null}
-                </span>
-                <span className="sidebar__health-path" style={ellipsisStyle} title={component.filePath}>
-                  {component.filePath}
-                </span>
-                {getDetail?.(component) ? (
-                  <span className="sidebar__health-detail" style={ellipsisStyle} title={getDetail(component) ?? undefined}>
-                    {getDetail(component)}
+                  <span className="sidebar__health-path" style={ellipsisStyle} title={component.filePath}>
+                    {component.filePath}
                   </span>
-                ) : null}
-              </span>
-            </button>
-          ))}
+                  {getDetail?.(component) ? (
+                    <span className="sidebar__health-detail" style={ellipsisStyle} title={getDetail(component) ?? undefined}>
+                      {getDetail(component)}
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+            ))
+          )}
         </div>
       ) : null}
     </section>
@@ -119,6 +125,7 @@ export default function Sidebar({
       title: "SHARED COMPONENTS",
       colorClass: "dot-shared",
       accentClass: "sidebar__health-item--shared",
+      emptyMessage: "No shared components",
       items: healthComponents.filter((component) => component.isShared && !component.shouldMoveToShared)
     },
     {
@@ -126,6 +133,7 @@ export default function Sidebar({
       title: "MOVE TO SHARED",
       colorClass: "dot-move",
       accentClass: "sidebar__health-item--move",
+      emptyMessage: "All components are well placed",
       items: healthComponents.filter((component) => component.shouldMoveToShared),
       icon: "→"
     },
@@ -134,6 +142,7 @@ export default function Sidebar({
       title: "UNUSED",
       colorClass: "dot-unused",
       accentClass: "sidebar__health-item--unused",
+      emptyMessage: "No unused files detected",
       items: healthComponents.filter((component) => component.isUnused),
       icon: "🗑"
     },
@@ -142,6 +151,7 @@ export default function Sidebar({
       title: "CIRCULAR DEPS",
       colorClass: "dot-circular",
       accentClass: "sidebar__health-item--circular",
+      emptyMessage: "No circular dependencies",
       items: healthComponents.filter((component) => component.hasCircularDependency)
     },
     {
@@ -149,6 +159,7 @@ export default function Sidebar({
       title: "PROP DRILLING",
       colorClass: "dot-prop-drill",
       accentClass: "sidebar__health-item--prop-drill",
+      emptyMessage: "No prop drilling detected",
       items: healthComponents.filter((component) => component.hasPropDrilling),
       getDetail: (component) => {
         const details = component.propDrillingDetails ?? [];
@@ -159,7 +170,7 @@ export default function Sidebar({
         return details.map((detail) => `${detail.propName} (${detail.depth})`).join(", ");
       }
     }
-  ].filter((section) => section.items.length > 0);
+  ];
 
   const handleHealthItemClick = (nodeId: string) => {
     onNodeFocus(nodeId);
@@ -239,33 +250,32 @@ export default function Sidebar({
             <div><span className="dot dot-shared" /> Shared</div>
           </div>
         </section>
-        {healthSections.length > 0 ? (
-          <div className="sidebar__health">
-            <div className="sidebar__health-divider" />
-            <div className="sidebar__health-label">Code Health</div>
-            <div className="sidebar__health-divider" />
-            {healthSections.map((section) => (
-              <HealthSection
-                accentClass={section.accentClass}
-                colorClass={section.colorClass}
-                getDetail={section.getDetail}
-                icon={section.icon}
-                isOpen={openSections[section.key]}
-                items={section.items}
-                key={section.key}
-                onItemClick={handleHealthItemClick}
-                onToggle={() =>
-                  setOpenSections((current) => ({
-                    ...current,
-                    [section.key]: !current[section.key]
-                  }))
-                }
-                selectedNodeId={selectedNodeId}
-                title={section.title}
-              />
-            ))}
-          </div>
-        ) : null}
+        <div className="sidebar__health">
+          <div className="sidebar__health-divider" />
+          <div className="sidebar__health-label">Code Health</div>
+          <div className="sidebar__health-divider" />
+          {healthSections.map((section) => (
+            <HealthSection
+              accentClass={section.accentClass}
+              colorClass={section.colorClass}
+              emptyMessage={section.emptyMessage}
+              getDetail={section.getDetail}
+              icon={section.icon}
+              isOpen={openSections[section.key]}
+              items={section.items}
+              key={section.key}
+              onItemClick={handleHealthItemClick}
+              onToggle={() =>
+                setOpenSections((current) => ({
+                  ...current,
+                  [section.key]: !current[section.key]
+                }))
+              }
+              selectedNodeId={selectedNodeId}
+              title={section.title}
+            />
+          ))}
+        </div>
       </div>
     </aside>
   );
