@@ -45,6 +45,22 @@ interface ResolvedImportUsage {
   viaBarrel: boolean;
 }
 
+const FRAMEWORK_FILE_PATTERNS = [
+  /\/app\/layout\.[tj]sx?$/,
+  /\/app\/loading\.[tj]sx?$/,
+  /\/app\/error\.[tj]sx?$/,
+  /\/app\/not-found\.[tj]sx?$/,
+  /\/app\/template\.[tj]sx?$/,
+  /\/middleware\.[tj]sx?$/,
+  /\/pages\/_app\.[tj]sx?$/,
+  /\/pages\/_document\.[tj]sx?$/
+];
+
+function isFrameworkFile(filePath: string): boolean {
+  const normalized = `/${filePath.replace(/\\/g, "/").replace(/^\/+/, "")}`;
+  return FRAMEWORK_FILE_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
 function buildLookup(
   pages: PageNode[],
   components: ComponentNode[],
@@ -600,20 +616,26 @@ function detectPropDrilling(
   seeds: EdgeSeed[]
 ): Map<string, PropDrillingDetail[]> {
   const componentById = new Map(components.map((component) => [component.id, component]));
+  const pageIds = new Set(pages.map((page) => page.id));
   const nodeNameById = new Map<string, string>([
     ...pages.map((page) => [page.id, page.name] as const),
     ...components.map((component) => [component.id, component.name] as const)
   ]);
   const renderEdgesBySource = new Map<string, EdgeSeed[]>();
+  const incomingRenderEdgeTargets = new Set<string>();
 
   for (const seed of seeds) {
-    if (seed.relationshipType !== "renders" || !seed.props?.length) {
+    if (seed.relationshipType !== "renders") {
       continue;
     }
 
-    const renderEdges = renderEdgesBySource.get(seed.source) ?? [];
-    renderEdges.push(seed);
-    renderEdgesBySource.set(seed.source, renderEdges);
+    incomingRenderEdgeTargets.add(seed.target);
+
+    if (seed.props?.length) {
+      const renderEdges = renderEdgesBySource.get(seed.source) ?? [];
+      renderEdges.push(seed);
+      renderEdgesBySource.set(seed.source, renderEdges);
+    }
   }
 
   const detailsByComponentId = new Map<string, PropDrillingDetail[]>();
@@ -664,17 +686,31 @@ function detectPropDrilling(
     }
   };
 
-  for (const edge of seeds) {
-    if (edge.relationshipType !== "renders" || !edge.props?.length) {
-      continue;
-    }
+  const drillRootEdges = seeds.filter(
+    (edge) =>
+      edge.relationshipType === "renders" &&
+      !!edge.props?.length &&
+      !incomingRenderEdgeTargets.has(edge.source)
+  );
 
-    for (const prop of edge.props) {
-      extendChain(prop.name, [edge.source, edge.target]);
+  for (const edge of drillRootEdges) {
+    for (const prop of edge.props ?? []) {
+      extendChain(prop.name, pageIds.has(edge.source) ? [edge.target] : [edge.source, edge.target]);
     }
   }
 
-  return detailsByComponentId;
+  return new Map(
+    Array.from(detailsByComponentId.entries()).map(([componentId, details]) => {
+      const deduped = new Map<string, PropDrillingDetail>();
+      for (const detail of details) {
+        const existing = deduped.get(detail.propName);
+        if (!existing || detail.depth > existing.depth) {
+          deduped.set(detail.propName, detail);
+        }
+      }
+      return [componentId, Array.from(deduped.values())];
+    })
+  );
 }
 
 export function buildEdges(
@@ -951,6 +987,23 @@ export function buildEdges(
   const allPageIds = pages.map((page) => page.id);
 
   for (const component of components) {
+    component.hasCircularDependency = circularDependenciesByComponentId.has(component.id);
+    component.circularDependencyChain = circularDependenciesByComponentId.get(component.id);
+
+    if (isFrameworkFile(component.filePath)) {
+      component.usedInPages = [];
+      component.usageCount = 0;
+      component.isShared = false;
+      component.shouldMoveToShared = false;
+      component.isUnused = false;
+      component.unusedReason = undefined;
+      component.hasCircularDependency = false;
+      component.circularDependencyChain = undefined;
+      component.hasPropDrilling = false;
+      component.propDrillingDetails = undefined;
+      continue;
+    }
+
     const isReserved = isFrameworkReservedFile(component.filePath);
     const usedByPages = isReserved ? allPageIds : Array.from(usageByComponentId.get(component.id) ?? []);
     const usageCount = usedByPages.length;
@@ -959,6 +1012,7 @@ export function buildEdges(
     const isReferencedAsIdentifier = identifierUsageByComponentId.has(component.id);
     const isReferencedThroughBarrel = barrelUsageByComponentId.has(component.id);
     const isUnused =
+      !component.hasCircularDependency &&
       !isReferencedAsJsx &&
       !isReferencedAsIdentifier &&
       !isReferencedThroughBarrel &&
@@ -970,8 +1024,6 @@ export function buildEdges(
     component.shouldMoveToShared = shouldMoveToShared;
     component.isUnused = isUnused;
     component.unusedReason = isUnused ? "Not referenced by any page or component tree" : undefined;
-    component.hasCircularDependency = circularDependenciesByComponentId.has(component.id);
-    component.circularDependencyChain = circularDependenciesByComponentId.get(component.id);
     component.hasPropDrilling = propDrillingByComponentId.has(component.id);
     component.propDrillingDetails = propDrillingByComponentId.get(component.id);
   }

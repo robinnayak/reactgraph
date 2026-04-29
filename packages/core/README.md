@@ -1,30 +1,9 @@
 # @reactgraph-ui/core
 
-`@reactgraph-ui/core` is the analyzer, CLI, and packaged browser-viewer runtime behind ReactGraph.
+`@reactgraph-ui/core` is the local analyzer and CLI for ReactGraph, an open-source tool that maps React, Next.js, and Expo projects as `Pages -> Components -> Hooks -> APIs`.
 
-It is the part of the project you install when you want to:
-
-- analyze a React or Next.js project from code
-- use the `reactgraph` CLI
-- open the local browser viewer with `serve` or `view`
-- generate a formatted file tree programmatically
-
-## What This Package Can Do
-
-This package can:
-
-- analyze a project and build graph data for pages, components, hooks, APIs, and edges
-- write `reactgraph.json` for downstream consumption
-- provide the `reactgraph` CLI
-- launch or serve the local browser viewer
-- generate a clean project file tree with `generateFileTree()`
-- expose TypeScript types for graph data
-
-This package does not include:
-
-- the VS Code extension host
-- extension-only features such as open-in-editor commands
-- the VS Code health-check workflow
+Version: `0.1.6`  
+Publisher: Robin Nayak
 
 ## Install
 
@@ -32,182 +11,102 @@ This package does not include:
 npm install @reactgraph-ui/core
 ```
 
+Package: [@reactgraph-ui/core on npm](https://www.npmjs.com/package/@reactgraph-ui/core)
+
 ## CLI Usage
 
-After installing, use the `reactgraph` binary:
+Analyze a project and write `reactgraph.json`:
 
 ```bash
-npx reactgraph analyze .
-npx reactgraph serve .
-npx reactgraph view .
+npx reactgraph analyze <project-path>
 ```
 
-Available commands:
-
-- `reactgraph analyze [path]`
-  analyze a project and write `reactgraph.json`
-- `reactgraph serve [path]`
-  start the browser viewer server
-- `reactgraph view [path]`
-  start the browser viewer and open it automatically when possible
-
-Example:
+Start the local browser viewer:
 
 ```bash
-npx reactgraph analyze .
-npx reactgraph serve .
+npx reactgraph serve <project-path>
 ```
 
-Default browser viewer URL:
+The viewer runs locally and does not require a backend or database.
 
-```txt
-http://127.0.0.1:4174
-```
+## Output
+
+`reactgraph analyze` produces graph data with:
+
+- `pages`: detected route and screen entry points
+- `components`: React components, props, usage counts, and health metadata
+- `hooks`: custom hooks with params and return values
+- `apis`: detected API calls and HTTP methods
+- `edges`: relationships between pages, components, hooks, APIs, and context
+- Code health: shared components, move-to-shared suggestions, unused nodes, circular dependencies, and prop drilling
+
+The analyzer writes `reactgraph.json` to the target project root.
+
+## Supported Project Structures
+
+ReactGraph currently works best with Next.js folder conventions, especially App Router `app/**/page.tsx` and Pages Router `pages/**/*.tsx` projects. Expo Router and React Native screens are supported, with deeper framework-specific detection planned as the analyzer grows.
+
+- Next.js App Router: `app/`
+- Next.js Pages Router: `pages/`
+- Expo Router: `app/`
+- React Native: `screens/`
+
+## Features
+
+- Interactive graph with zoom, pan, and minimap
+- Node inspector with props table, returns, dependencies, and code snippet
+- Page switcher sidebar
+- Search bar and filter toggles for Components, Hooks, APIs, and Context
+- Impact Analysis with blast radius highlighting
+- Health Check support for `tsc --noEmit` results in graph nodes
+- Export SVG
+- Copy File Tree
+- Code Health badges and sidebar sections:
+  - `SHARED` (gold): used by 2+ pages and inside `shared/`
+  - `MOVE TO SHARED` (orange): used by 2+ pages and outside `shared/`
+  - `UNUSED` (red): no importers found
+  - `CIRCULAR` (purple): participates in an import cycle
+  - `PROP DRILL` (amber): prop passed through 3+ levels unchanged
+- Clickable sidebar items that center the graph and open the inspector
+- Expo and React Native support
+- Runs entirely locally with no backend and no database
 
 ## Programmatic Usage
 
-### Analyze a Project
-
 ```ts
-import { analyze } from "@reactgraph-ui/core";
+import { analyze, generateFileTree } from "@reactgraph-ui/core";
 
 const graph = await analyze(".");
+const tree = await generateFileTree(".");
 
 console.log(graph.pages.length);
 console.log(graph.components.length);
-console.log(graph.hooks.length);
-console.log(graph.apis.length);
-console.log(graph.edges.length);
-```
-
-### Generate a File Tree
-
-```ts
-import { generateFileTree } from "@reactgraph-ui/core";
-
-const tree = await generateFileTree(".");
 console.log(tree);
 ```
 
-The generated file tree:
+## Changelog
 
-- excludes folders such as `node_modules`, `.git`, `.next`, `.turbo`, `.cache`, `dist`, `build`, `.vercel`, and `coverage`
-- excludes `*.vsix` and `*.tgz`
-- keeps folders before files
-- sorts alphabetically
-- limits recursion depth
+### v0.1.2
 
-## Graph Data
+- Fixed component files misclassified as pages, including `AdminShell`, `*PageView`, and similar files.
+- Fixed `layout.tsx` and framework files receiving code health badges.
+- Fixed circular dependency participants also being marked unused.
+- Fixed duplicate prop drill entries per component.
 
-The main output shape is:
+## Known Limitations
 
-```ts
-interface GraphData {
-  pages: PageNode[];
-  components: ComponentNode[];
-  hooks: HookNode[];
-  apis: ApiNode[];
-  edges: Edge[];
-}
-```
+Planned for v0.2:
 
-Graph data can include:
+- Service layer API detection, such as `goalsApi.getGoals()` patterns
+- React Query and SWR wrapper detection
+- Code health export as a markdown report
+- Real-time graph updates on file save
 
-- component props
-- hook params and return values
-- API endpoints and methods
-- component usage counts
-- shared-component indicators
-- move-to-shared suggestions
-- unused-component indicators
+## Full Documentation
 
-## Browser Viewer
+See the GitHub repository for full docs, source code, issues, and contribution notes:
 
-This package also powers the browser viewer.
-
-You can use:
-
-```bash
-npx reactgraph serve .
-```
-
-or:
-
-```bash
-npx reactgraph view .
-```
-
-The browser viewer includes:
-
-- interactive graph navigation
-- impact analysis
-- export SVG
-- copy file tree
-
-The viewer serves:
-
-- `/reactgraph.json`
-- `/file-tree`
-
-## Output Files
-
-When using `analyze()`, the package writes `reactgraph.json` to the target project root.
-
-Add this to your app's `.gitignore`:
-
-```gitignore
-reactgraph.json
-```
-
-## Local Development And Linking
-
-To test this package in another local project without publishing:
-
-From this package directory:
-
-```powershell
-cd "C:\Users\robin\OneDrive\Desktop\React graph\packages\core"
-npm run build
-npm link
-```
-
-From the target project:
-
-```powershell
-cd "C:\path\to\your\project"
-npm link @reactgraph-ui/core
-```
-
-Then run:
-
-```powershell
-npx reactgraph analyze .
-npx reactgraph serve .
-```
-
-If you change only `packages/core/src`, rebuilding this package is usually enough:
-
-```powershell
-npm run build
-```
-
-If you change UI behavior that affects the browser viewer, rebuild from the monorepo root so viewer assets are recopied:
-
-```powershell
-cd "C:\Users\robin\OneDrive\Desktop\React graph"
-npm run build -- --force
-```
-
-## Works Best With
-
-- Next.js App Router
-- Next.js Pages Router
-- React TypeScript projects
-
-## Related Packages
-
-- root repo: [ReactGraph](https://github.com/robinnayak/reactgraph)
-- VS Code extension docs: `packages/vscode/README.md`
+[https://github.com/robinnayak/reactgraph](https://github.com/robinnayak/reactgraph)
 
 ## License
 

@@ -1,148 +1,82 @@
 # ReactGraph for VS Code
 
-ReactGraph brings a visual codebase explorer to VS Code for React and Next.js projects.
+ReactGraph visualizes React, Next.js, and Expo codebases inside VS Code so you can understand how pages, components, hooks, APIs, and context connect before you refactor.
 
-It analyzes your project and maps:
-
-`Pages -> Components -> Hooks -> APIs`
-
-inside an interactive webview.
-
-## What The Extension Can Do
-
-The VS Code extension can:
-
-- open an interactive graph for your current workspace
-- inspect pages, components, hooks, APIs, and relationships
-- show props, params, return values, file paths, and usage information
-- run impact analysis to show what may be affected by a change
-- run a TypeScript health check and summarize issues
-- highlight shared components, move-to-shared suggestions, and unused components
-- export the current graph as SVG
-- copy the workspace file tree to the clipboard
-- open a selected file directly in VS Code from the inspector
-- keep the graph refreshed when files are saved
+Version: `0.1.6`  
+Publisher: Robin Nayak  
+Marketplace: [reactgraph.reactgraph-vscode](https://marketplace.visualstudio.com/items?itemName=reactgraph.reactgraph-vscode)
 
 ## How To Use
 
-1. Open a React or Next.js project in VS Code.
-2. Press `Ctrl+Shift+P`.
-3. Run:
+1. Open your React, Next.js, or Expo project in VS Code.
+2. Run `ReactGraph: Open Graph Viewer` from the Command Palette.
+3. Explore your codebase visually.
 
-```txt
-ReactGraph: Open Graph
-```
+## Features
 
-The graph opens in a side panel beside your editor.
+- Interactive graph with zoom, pan, and minimap
+- Node inspector with props table, return values, dependencies, and code snippet
+- Page switcher sidebar for moving between app routes and screens
+- Search bar and filter toggles for Components, Hooks, APIs, and Context
+- Impact Analysis that highlights the blast radius of a selected node
+- Health Check that runs `tsc --noEmit` and maps errors onto graph nodes
+- Export SVG for sharing a graph snapshot
+- Copy File Tree for docs, issues, and reviews
+- Clickable sidebar items that center the graph and open the inspector
+- Expo and React Native support, including Expo Router and `screens/`
+- Runs entirely locally with no backend and no database
 
-## Main Features
+## Code Health Badges
 
-### Interactive Graph
+ReactGraph highlights common structure and maintenance signals:
 
-The graph viewer includes:
+- `SHARED` (gold): used by 2+ pages and already inside `shared/`
+- `MOVE TO SHARED` (orange): used by 2+ pages and outside `shared/`
+- `UNUSED` (red): no importers found
+- `CIRCULAR` (purple): participates in an import cycle
+- `PROP DRILL` (amber): prop passed through 3+ levels unchanged
 
-- zoom in, zoom out, and fit view controls
-- filters for components, hooks, APIs, and context
-- node cards with labels, file paths, and visual emphasis
-- node selection and focused inspection
+The Code Health sidebar groups these findings, and each item can be clicked to center the graph and open the inspector.
 
-### Node Inspector
+## Requirements
 
-Selecting a node shows:
-
-- file path
-- dependencies
-- reverse usage
-- props, params, and return data where available
-- code context preview
-- shared usage suggestions
-- unused component warnings
-
-For files in the workspace, the extension can open the selected file directly in the editor.
-
-### Impact Analysis
-
-Impact Analysis helps answer:
-
-- which pages depend on this component
-- which downstream nodes may be affected
-- which pages appear safe from the selected change
-
-This is useful before refactors and shared-component edits.
-
-### Health Check
-
-The Health Check runs a workspace-level TypeScript-oriented analysis and reports:
-
-- error and warning counts
-- affected files
-- display issues grouped for easier review
-- page-level impact summary
-
-This feature is available in the VS Code extension because it relies on the extension host workflow.
-
-### Copy File Tree
-
-The toolbar includes a `Copy File Tree` action that copies a clean text view of the workspace structure.
-
-The generated tree:
-
-- excludes noisy folders such as `node_modules`, `.git`, `.next`, `dist`, and `build`
-- keeps folders before files
-- sorts alphabetically
-- is formatted for easy sharing in docs, issues, or prompts
-
-### Export SVG
-
-You can export the current graph canvas as an SVG snapshot directly from the toolbar.
+- VS Code `1.80+`
+- Node.js available in your workspace environment
+- A React, Next.js, Expo, or React Native project
+- TypeScript project recommended for the best inspector and Health Check results
 
 ## Supported Projects
 
-ReactGraph works best with:
+ReactGraph currently works best with Next.js folder conventions, especially App Router `app/**/page.tsx` and Pages Router `pages/**/*.tsx` projects. Expo Router and React Native screens are supported, with deeper framework-specific detection planned as the analyzer grows.
 
-- Next.js App Router projects
-- Next.js Pages Router projects
-- React TypeScript projects
+- Next.js App Router: `app/`
+- Next.js Pages Router: `pages/`
+- Expo Router: `app/`
+- React Native: `screens/`
 
-It is designed around codebase relationships rather than runtime framework internals.
+## Changelog
 
-## Build And Install From This Repo
+### v0.1.2
 
-From the monorepo root:
+- Fixed component files misclassified as pages, including `AdminShell`, `*PageView`, and similar files.
+- Fixed `layout.tsx` and framework files receiving code health badges.
+- Fixed circular dependency participants also being marked unused.
+- Fixed duplicate prop drill entries per component.
 
-```bash
-npm install
-npm run build -- --force
-cd packages/vscode
-npm run package
-```
+## Known Limitations
 
-Then in VS Code:
+Planned for v0.2:
 
-1. Open the Command Palette.
-2. Run `Extensions: Install from VSIX...`
-3. Select the generated `.vsix` file in `packages/vscode`
+- Service layer API detection, such as `goalsApi.getGoals()` patterns
+- React Query and SWR wrapper detection
+- Code health export as a markdown report
+- Real-time graph updates on file save
 
-## When To Use The Extension Instead Of The CLI
+## Issues And Contributions
 
-Use the VS Code extension when you want:
+ReactGraph is open source. Report issues, request features, or contribute at:
 
-- the full interactive graph inside the editor
-- health check support
-- open-in-editor actions
-- workspace-native navigation
-
-Use the core package and CLI when you want:
-
-- terminal analysis
-- scripts and automation
-- the browser viewer outside VS Code
-
-## Links
-
-- [GitHub Repository](https://github.com/robinnayak/reactgraph)
-- [Core Package](https://npmjs.com/package/@reactgraph-ui/core)
-- [Issues](https://github.com/robinnayak/reactgraph/issues)
+[https://github.com/robinnayak/reactgraph](https://github.com/robinnayak/reactgraph)
 
 ## License
 

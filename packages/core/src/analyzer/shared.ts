@@ -8,6 +8,26 @@ import type { Param, ParsedModule, Prop, ReturnValue } from "../types.js";
 export const PAGE_GLOBS = ["pages/**/*.tsx", "app/**/page.tsx"];
 export const TS_GLOBS = ["**/*.ts", "**/*.tsx"];
 export const JSX_GLOBS = ["**/*.tsx"];
+export const ROUTER_ROOTS = ["/app/", "/pages/"];
+export const PAGE_FILENAMES = ["page.tsx", "page.ts", "index.tsx", "index.ts"];
+export const EXCLUDED_FILENAMES = [
+  "layout.tsx",
+  "layout.ts",
+  "loading.tsx",
+  "loading.ts",
+  "error.tsx",
+  "error.ts",
+  "not-found.tsx",
+  "not-found.ts",
+  "template.tsx",
+  "template.ts",
+  "middleware.ts",
+  "middleware.tsx",
+  "_app.tsx",
+  "_app.ts",
+  "_document.tsx",
+  "_document.ts"
+];
 export const DEFAULT_IGNORES = [
   "**/node_modules/**",
   "**/.next/**",
@@ -20,8 +40,7 @@ export const DEFAULT_IGNORES = [
   "**/.turbo/**"
 ];
 
-const ROUTE_LIKE_SEGMENTS = new Set(["pages", "screens", "app", "views", "routes"]);
-const NON_ROUTE_SEGMENTS = new Set([
+const NON_ROUTER_SEGMENTS = new Set([
   "components",
   "hooks",
   "lib",
@@ -440,73 +459,57 @@ export function hasDefaultComponentExport(module: ParsedModule): boolean {
   });
 }
 
-export function isRouteLikeParentFolder(segment: string | undefined): boolean {
-  if (!segment) {
-    return false;
-  }
-
-  const normalized = segment.toLowerCase();
-  return /^[a-z0-9_-]+$/.test(normalized) && !NON_ROUTE_SEGMENTS.has(normalized);
+function pathWithSentinels(filePath: string): string {
+  return `/${filePath.replace(/\\/g, "/").replace(/^\/+/, "")}`;
 }
 
-export function isPageLikeFile(relativePath: string, module?: ParsedModule): boolean {
-  const normalized = relativePath.replace(/\\/g, "/");
-  const segments = relativeSegments(normalized);
-  const fileName = path.basename(normalized);
-  const baseName = path.basename(normalized, path.extname(normalized));
-  const parent = segments.at(-2)?.toLowerCase();
-  const hasDefaultExport = module ? hasDefaultComponentExport(module) : false;
-  const isInsideAppRouter = /(^|\/)app\//.test(normalized);
-  const isInsidePagesRouter = /(^|\/)pages\//.test(normalized);
-  const isInsideScreenLikeFolder = /(^|\/)(screens|views|routes)\//.test(normalized);
+function routerRootIndex(filePath: string, routerRoot: string): number {
+  return pathWithSentinels(filePath).indexOf(routerRoot);
+}
 
-  if ([...RESERVED_ROUTE_FILES].some((name) => normalized.endsWith(name) || normalized.endsWith(`/${name}`))) {
+export function isPageFile(filePath: string): boolean {
+  const normalized = filePath.replace(/\\/g, "/");
+  const fileName = path.basename(normalized);
+  const appRootIndex = routerRootIndex(normalized, ROUTER_ROOTS[0]);
+  const pagesRootIndex = routerRootIndex(normalized, ROUTER_ROOTS[1]);
+
+  if (EXCLUDED_FILENAMES.includes(fileName) || !/\.(tsx|ts)$/.test(fileName)) {
     return false;
   }
 
-  // Next.js App Router pages must be explicit page.* files.
-  if (isInsideAppRouter) {
-    return /(^|\/)page\.(tsx|ts|jsx|js)$/.test(normalized);
+  if (appRootIndex >= 0) {
+    return fileName === "page.tsx" || fileName === "page.ts";
   }
 
-  if (isInsidePagesRouter) {
-    return true;
-  }
-
-  if (isInsideScreenLikeFolder || /(?:Page|Screen|View|Route)\.tsx?$/.test(fileName)) {
-    return true;
-  }
-
-  if (baseName === "page") {
-    return true;
-  }
-
-  if (hasDefaultExport && isRouteLikeParentFolder(parent)) {
-    return true;
-  }
-
-  if (hasDefaultExport && parent === "app") {
-    return true;
+  if (pagesRootIndex >= 0) {
+    const pagesRelativePath = pathWithSentinels(normalized).slice(pagesRootIndex + ROUTER_ROOTS[1].length);
+    if (!pagesRelativePath || pagesRelativePath.startsWith("api/")) {
+      return false;
+    }
+    return PAGE_FILENAMES.includes(fileName) || /\.(tsx|ts)$/.test(fileName);
   }
 
   return false;
 }
 
+export function isPageLikeFile(relativePath: string, _module?: ParsedModule): boolean {
+  return isPageFile(relativePath);
+}
+
 export function isComponentLikeFile(relativePath: string, module?: ParsedModule): boolean {
   const normalized = relativePath.replace(/\\/g, "/");
   const fileName = path.basename(normalized);
-  const baseName = path.basename(fileName, path.extname(fileName));
   const hasComponentExport = module ? hasReactComponentExport(module) : false;
 
-  if (isPageLikeFile(normalized, module) && !/(^|\/)(app|screens)\//.test(normalized)) {
+  if (isPageFile(normalized)) {
     return false;
   }
 
-  if (/(^|\/)components\//.test(normalized)) {
-    return true;
+  if (!hasComponentExport) {
+    return false;
   }
 
-  if (/(^|\/)(app|screens)\//.test(normalized) && baseName !== "page" && hasComponentExport) {
+  if (relativeSegments(normalized).some((segment) => NON_ROUTER_SEGMENTS.has(segment.toLowerCase()))) {
     return true;
   }
 
@@ -514,11 +517,7 @@ export function isComponentLikeFile(relativePath: string, module?: ParsedModule)
     return true;
   }
 
-  return hasComponentExport && !segmentsContainRouteLikeFolder(normalized);
-}
-
-function segmentsContainRouteLikeFolder(relativePath: string): boolean {
-  return relativeSegments(relativePath).some((segment) => ROUTE_LIKE_SEGMENTS.has(segment.toLowerCase()));
+  return hasComponentExport;
 }
 
 export function hasReactComponentExport(module: ParsedModule): boolean {

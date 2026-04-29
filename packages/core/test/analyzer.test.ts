@@ -74,6 +74,37 @@ describe("core analyzer", () => {
     });
   });
 
+  it("classifies only Next router files as pages and keeps page-like components as components", () => {
+    const root = makeProject({
+      "app/page.tsx": "export default function HomePage() { return <main />; }",
+      "app/customers/page.tsx": "export default function CustomersPage() { return <main />; }",
+      "pages/checkout.tsx": "export default function CheckoutPage() { return <main />; }",
+      "components/layout/AdminShell.tsx": "export default function AdminShell() { return <section />; }",
+      "components/forms/LoginForm.tsx": "export default function LoginForm() { return <form />; }",
+      "components/dashboard/MetricCard.tsx": "export default function MetricCard() { return <article />; }",
+      "components/charts/AnalyticsCharts.tsx": "export default function AnalyticsCharts() { return <div />; }",
+      "components/dashboard/ProductsPageView.tsx": "export default function ProductsPageView() { return <main />; }",
+      "src/screens/DashboardScreen.tsx": "export default function DashboardScreen() { return <View />; }"
+    });
+
+    const pages = findPages(root);
+    const components = findComponents(root);
+    const pagePaths = pages.map((page) => page.filePath).sort();
+    const componentNames = components.map((component) => component.name);
+
+    expect(pagePaths).toEqual(["app/customers/page.tsx", "app/page.tsx", "pages/checkout.tsx"]);
+    expect(componentNames).toEqual(
+      expect.arrayContaining([
+        "AdminShell",
+        "LoginForm",
+        "MetricCard",
+        "AnalyticsCharts",
+        "ProductsPageView",
+        "DashboardScreen"
+      ])
+    );
+  });
+
   it("extracts component props, hooks, apis, and edges", async () => {
     const root = makeProject({
       "pages/dashboard.tsx": `
@@ -256,7 +287,7 @@ describe("core analyzer", () => {
     expect(detectProjectType(root)).toBe("expo");
   });
 
-  it("detects React Native screens as pages", () => {
+  it("does not classify React Native screens as pages under Next-only page rules", () => {
     const root = makeProject({
       "src/screens/DashboardScreen.tsx": `
         export default function DashboardScreen() {
@@ -265,7 +296,8 @@ describe("core analyzer", () => {
       `
     });
 
-    expect(findPages(root)).toEqual(
+    expect(findPages(root)).toEqual([]);
+    expect(findComponents(root)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           name: "DashboardScreen",
@@ -273,6 +305,45 @@ describe("core analyzer", () => {
         })
       ])
     );
+  });
+
+  it("does not assign code health badges to Next framework files", async () => {
+    const root = makeProject({
+      "app/page.tsx": `
+        import RootLayout from "./layout";
+        export default function HomePage() {
+          return <RootLayout><main /></RootLayout>;
+        }
+      `,
+      "app/customers/page.tsx": `
+        import RootLayout from "../layout";
+        export default function CustomersPage() {
+          return <RootLayout><main /></RootLayout>;
+        }
+      `,
+      "app/layout.tsx": `
+        export default function RootLayout({ children }: { children?: React.ReactNode }) {
+          return <html><body>{children}</body></html>;
+        }
+      `
+    });
+
+    const graph = await analyze(root, { writeJson: false });
+    const rootLayout = graph.components.find((entry) => entry.filePath === "app/layout.tsx");
+
+    expect(rootLayout).toMatchObject({
+      name: "RootLayout",
+      isShared: false,
+      shouldMoveToShared: false,
+      isUnused: false,
+      hasCircularDependency: false,
+      hasPropDrilling: false,
+      usageCount: 0,
+      usedInPages: []
+    });
+    expect(rootLayout?.unusedReason).toBeUndefined();
+    expect(rootLayout?.circularDependencyChain).toBeUndefined();
+    expect(rootLayout?.propDrillingDetails).toBeUndefined();
   });
 
   it("marks a component used by two pages as shared with usage count", async () => {
@@ -451,6 +522,8 @@ describe("core analyzer", () => {
 
     expect(componentA?.hasCircularDependency).toBe(true);
     expect(componentB?.hasCircularDependency).toBe(true);
+    expect(componentA?.isUnused).toBe(false);
+    expect(componentB?.isUnused).toBe(false);
     expect(componentA?.circularDependencyChain).toEqual(["ComponentA", "ComponentB", "ComponentA"]);
     expect(componentB?.circularDependencyChain).toEqual(["ComponentA", "ComponentB", "ComponentA"]);
   });
@@ -530,6 +603,53 @@ describe("core analyzer", () => {
 
     expect(graph.components.every((component) => component.hasPropDrilling === false)).toBe(true);
     expect(graph.components.every((component) => component.propDrillingDetails === undefined)).toBe(true);
+  });
+
+  it("deduplicates prop drilling details per component while preserving the longest chain", async () => {
+    const root = makeProject({
+      "pages/index.tsx": `
+        import { DeepForm } from "../components/DeepForm";
+        export default function HomePage() {
+          return <DeepForm trackingId="checkout" />;
+        }
+      `,
+      "components/DeepForm.tsx": `
+        import { FieldRow } from "./FieldRow";
+        export function DeepForm() {
+          return <FieldRow trackingId="checkout" />;
+        }
+      `,
+      "components/FieldRow.tsx": `
+        import { InputCell } from "./InputCell";
+        export function FieldRow() {
+          return <InputCell trackingId="checkout" />;
+        }
+      `,
+      "components/InputCell.tsx": `
+        import { Label } from "./Label";
+        export function InputCell() {
+          return <Label trackingId="checkout" />;
+        }
+      `,
+      "components/Label.tsx": `
+        export function Label() {
+          return <span />;
+        }
+      `
+    });
+
+    const graph = await analyze(root, { writeJson: false });
+
+    for (const componentName of ["DeepForm", "FieldRow", "InputCell", "Label"]) {
+      const component = graph.components.find((entry) => entry.name === componentName);
+      expect(component?.propDrillingDetails).toEqual([
+        {
+          propName: "trackingId",
+          chain: ["DeepForm", "FieldRow", "InputCell", "Label"],
+          depth: 4
+        }
+      ]);
+    }
   });
 
   it("does not mark Expo layout files as unused", async () => {

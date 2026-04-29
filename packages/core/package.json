@@ -1,6 +1,6 @@
 {
   "name": "@reactgraph-ui/core",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Visualize your React/Next.js project as an interactive hierarchy graph. Maps Pages -> Components -> Hooks -> APIs with props, types, and connections.",
   "type": "module",
   "main": "dist/index.js",
