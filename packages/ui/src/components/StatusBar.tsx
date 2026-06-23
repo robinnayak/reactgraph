@@ -54,7 +54,7 @@ export default function StatusBar({
       <span>
         Project: <strong style={{ color: projectTypeColors[projectType] }}>{projectTypeLabels[projectType]}</strong>
       </span>
-      {counts.pages === 0 ? <span>⚠️ No pages detected — open Settings to configure page detection patterns</span> : null}
+      {counts.pages === 0 ? <span>⚠️ No pages detected - configure pagePatterns in reactgraph.config.json, CLI, or VS Code settings</span> : null}
       <span>{counts.context} context</span>
       {counts.shouldMoveToShared > 0 ? <span>{counts.shouldMoveToShared} should move to shared</span> : null}
       {counts.unused > 0 ? <span>{counts.unused} unused</span> : null}
@@ -73,3 +73,4 @@ export default function StatusBar({
     </footer>
   );
 }
+

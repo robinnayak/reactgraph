@@ -3,7 +3,7 @@
   "publisher": "reactgraph",
   "displayName": "ReactGraph",
   "description": "Visualize your React/Next.js component hierarchy, hooks, and API connections",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "main": "dist/extension.js",
   "icon": "assets/icon.png",
@@ -36,6 +36,19 @@
         "title": "ReactGraph: Open Graph"
       }
     ],
+    "configuration": {
+      "title": "ReactGraph",
+      "properties": {
+        "reactgraph.pagePatterns": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "Additional glob patterns to treat as page entry points, such as src/renderings/**/*.tsx for Sitecore projects."
+        }
+      }
+    },
     "menus": {
       "editor/title": [
         {
@@ -52,7 +65,7 @@
     "package": "npm run build && node scripts/package-vsix.js"
   },
   "devDependencies": {
-    "@reactgraph-ui/core": "^0.1.2",
+    "@reactgraph-ui/core": "^0.1.8",
     "@types/vscode": "^1.105.0",
     "@vscode/vsce": "^3.0.0",
     "esbuild": "^0.25.12",

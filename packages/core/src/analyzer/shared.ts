@@ -4,6 +4,7 @@ import { globSync } from "glob";
 import { parse } from "@typescript-eslint/typescript-estree";
 import type { TSESTree } from "@typescript-eslint/types";
 import type { Param, ParsedModule, Prop, ReturnValue } from "../types.js";
+import type { AnalyzerConfig } from "./config.js";
 
 export const PAGE_GLOBS = ["pages/**/*.tsx", "app/**/page.tsx"];
 export const TS_GLOBS = ["**/*.ts", "**/*.tsx"];
@@ -492,16 +493,25 @@ export function isPageFile(filePath: string): boolean {
   return false;
 }
 
-export function isPageLikeFile(relativePath: string, _module?: ParsedModule): boolean {
-  return isPageFile(relativePath);
+function matchesConfiguredPagePattern(relativePath: string, config?: AnalyzerConfig): boolean {
+  const normalized = relativePath.replace(/\\/g, "/");
+  return config?.pageFiles.has(normalized) ?? false;
 }
 
-export function isComponentLikeFile(relativePath: string, module?: ParsedModule): boolean {
+export function isPageLikeFile(relativePath: string, module?: ParsedModule, config?: AnalyzerConfig): boolean {
+  if (isPageFile(relativePath)) {
+    return true;
+  }
+
+  return Boolean(module && matchesConfiguredPagePattern(relativePath, config) && hasReactComponentExport(module));
+}
+
+export function isComponentLikeFile(relativePath: string, module?: ParsedModule, config?: AnalyzerConfig): boolean {
   const normalized = relativePath.replace(/\\/g, "/");
   const fileName = path.basename(normalized);
   const hasComponentExport = module ? hasReactComponentExport(module) : false;
 
-  if (isPageFile(normalized)) {
+  if (isPageLikeFile(normalized, module, config)) {
     return false;
   }
 
@@ -587,3 +597,4 @@ export function looksLikeJsxReturningFunction(
   });
   return found;
 }
+

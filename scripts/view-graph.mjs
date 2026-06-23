@@ -26,14 +26,37 @@ function getContentType(filePath) {
 }
 
 function printUsage() {
-  console.log("Usage: npm run view -- <path-to-react-project>");
-  console.log("Example: npm run view -- C:\\Users\\robin\\OneDrive\\Desktop\\ecommerse");
+  console.log("Usage: npm run view -- <path-to-react-project> [--page-pattern <glob>]");
+  console.log("Example: npm run view -- C:\\\\Users\\\\robin\\\\OneDrive\\\\Desktop\\\\ecommerse --page-pattern src/renderings/**/*.tsx");
 }
 
 function ensureBuildArtifacts() {
   if (!fs.existsSync(uiDistDir)) {
     throw new Error("UI build not found. Run `npm run build -- --force` from the repo root first.");
   }
+}
+
+function parseArgs(argv) {
+  const args = [...argv];
+  let targetProject;
+  const pagePatterns = [];
+
+  while (args.length > 0) {
+    const arg = args.shift();
+    if (arg === "--page-pattern") {
+      const pattern = args.shift();
+      if (pattern) {
+        pagePatterns.push(pattern);
+      }
+      continue;
+    }
+
+    if (!targetProject) {
+      targetProject = arg;
+    }
+  }
+
+  return { targetProject, pagePatterns };
 }
 
 function resolveTargetProject(argument) {
@@ -50,9 +73,9 @@ function serveFile(response, filePath) {
   response.end(file);
 }
 
-export async function startViewer(targetProject, port = 4174) {
+export async function startViewer(targetProject, port = 4174, analyzeOptions = {}) {
   ensureBuildArtifacts();
-  const graphData = await analyze(targetProject);
+  const graphData = await analyze(targetProject, analyzeOptions);
   const graphJson = JSON.stringify(graphData, null, 2);
   const fileTree = await generateFileTree(targetProject);
 
@@ -96,14 +119,15 @@ export async function startViewer(targetProject, port = 4174) {
 }
 
 async function main() {
-  const arg = process.argv[2];
-  if (arg === "--help" || arg === "-h") {
+  const firstArg = process.argv[2];
+  if (firstArg === "--help" || firstArg === "-h") {
     printUsage();
     return;
   }
 
-  const targetProject = resolveTargetProject(arg);
-  const { url, graphData } = await startViewer(targetProject);
+  const { targetProject: targetProjectArg, pagePatterns } = parseArgs(process.argv.slice(2));
+  const targetProject = resolveTargetProject(targetProjectArg);
+  const { url, graphData } = await startViewer(targetProject, 4174, { pagePatterns });
 
   console.log(`ReactGraph viewer running at ${url}`);
   console.log(`Project: ${targetProject}`);
@@ -119,3 +143,4 @@ if (process.argv[1] === __filename) {
     process.exitCode = 1;
   });
 }
+

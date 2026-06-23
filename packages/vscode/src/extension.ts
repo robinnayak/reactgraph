@@ -60,6 +60,12 @@ function hasGraphContent(graphData: GraphData): boolean {
   );
 }
 
+function getConfiguredPagePatterns(): string[] {
+  const patterns = vscode.workspace.getConfiguration("reactgraph").get<unknown>("pagePatterns", []);
+  return Array.isArray(patterns)
+    ? patterns.filter((pattern): pattern is string => typeof pattern === "string" && pattern.trim().length > 0)
+    : [];
+}
 function summarizeGraph(graphData: GraphData): string {
   return `${graphData.pages.length} pages, ${graphData.components.length} components, ${graphData.hooks.length} hooks, ${graphData.apis.length} apis, ${graphData.edges.length} edges`;
 }
@@ -264,7 +270,7 @@ async function renderPanel(
   const existingGraphData = readExistingGraphData(workspaceRoot);
   output.appendLine(`Analyzing workspace: ${workspaceRoot}`);
 
-  let graphData = await analyze(workspaceRoot, { writeJson: false });
+  let graphData = await analyze(workspaceRoot, { writeJson: false, pagePatterns: getConfiguredPagePatterns() });
   output.appendLine(`Extension analysis result: ${summarizeGraph(graphData)}`);
 
   if (!hasGraphContent(graphData) && existingGraphData && hasGraphContent(existingGraphData)) {
@@ -322,3 +328,4 @@ export function deactivate(): void {
   currentPanel = undefined;
   currentWorkspaceRoot = undefined;
 }
+

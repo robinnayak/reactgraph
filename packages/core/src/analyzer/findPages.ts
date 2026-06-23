@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { TSESTree } from "@typescript-eslint/types";
 import type { PageNode } from "../types.js";
+import type { AnalyzerConfig } from "./config.js";
 import {
   TS_GLOBS,
   createNodeId,
@@ -34,14 +35,14 @@ export function detectProjectType(projectRoot: string): "nextjs" | "expo" | "rea
   return "react";
 }
 
-export function findPages(projectRoot: string): PageNode[] {
+export function findPages(projectRoot: string, config?: AnalyzerConfig): PageNode[] {
   const pages: PageNode[] = [];
 
   for (const filePath of resolveProjectFiles(projectRoot, TS_GLOBS)) {
     try {
       const module = parseModule(filePath);
       const relativePath = relativeFilePath(projectRoot, filePath);
-      if (!isPageLikeFile(relativePath, module)) {
+      if (!isPageLikeFile(relativePath, module, config)) {
         continue;
       }
 
@@ -82,3 +83,4 @@ export function findPages(projectRoot: string): PageNode[] {
 
   return dedupeBy(pages, (page) => page.id);
 }
+

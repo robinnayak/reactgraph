@@ -4,6 +4,7 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { GraphData } from "./types.js";
+import type { AnalyzeOptions } from "./analyzer/analyze.js";
 import { analyze } from "./analyzer/analyze.js";
 import { generateFileTree } from "./analyzer/generateFileTree.js";
 
@@ -63,9 +64,9 @@ export interface ViewerResult {
   url: string;
 }
 
-export async function startViewer(targetProject: string, port = 4174): Promise<ViewerResult> {
+export async function startViewer(targetProject: string, port = 4174, analyzeOptions: AnalyzeOptions = {}): Promise<ViewerResult> {
   ensureViewerAssets();
-  const graphData = await analyze(targetProject);
+  const graphData = await analyze(targetProject, analyzeOptions);
   const graphJson = JSON.stringify(graphData, null, 2);
   const fileTree = await generateFileTree(targetProject);
 
@@ -111,3 +112,4 @@ export async function startViewer(targetProject: string, port = 4174): Promise<V
 export function launchViewer(url: string): void {
   openBrowser(url);
 }
+

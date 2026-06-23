@@ -54,6 +54,19 @@ ReactGraph currently works best with Next.js folder conventions, especially App 
 - Expo Router: `app/`
 - React Native: `screens/`
 
+
+## Configuring Page Entry Points
+
+ReactGraph detects Next.js App Router and Pages Router entries by default. For frameworks that call components dynamically, such as Sitecore renderings, configure additional page patterns in VS Code settings:
+
+```json
+{
+  "reactgraph.pagePatterns": ["src/renderings/**/*.tsx"]
+}
+```
+
+You can also create `reactgraph.config.json` in the project root with the same pattern under `pagePatterns`. Only matching files that export a React component are promoted to pages.
+
 ## Changelog
 
 ### v0.1.2
@@ -81,3 +94,4 @@ ReactGraph is open source. Report issues, request features, or contribute at:
 ## License
 
 MIT
+

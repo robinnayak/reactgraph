@@ -6,7 +6,9 @@ export { findHooks } from "./analyzer/findHooks.js";
 export { findApis } from "./analyzer/findApis.js";
 export { buildEdges } from "./analyzer/buildEdges.js";
 export { generateFileTree } from "./analyzer/generateFileTree.js";
+export { resolveAnalyzerConfig } from "./analyzer/config.js";
 export type { AnalyzeOptions } from "./analyzer/analyze.js";
+export type { AnalyzerConfig, AnalyzerConfigInput } from "./analyzer/config.js";
 export type {
   GraphData,
   PageNode,
@@ -22,3 +24,4 @@ export type {
   HookMeta,
   ParsedModule
 } from "./types.js";
+

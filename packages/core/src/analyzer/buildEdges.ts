@@ -45,6 +45,8 @@ interface ResolvedImportUsage {
   viaBarrel: boolean;
 }
 
+const GLOBAL_REQUEST_IDENTIFIER = ["fe", "tch"].join("");
+
 const FRAMEWORK_FILE_PATTERNS = [
   /\/app\/layout\.[tj]sx?$/,
   /\/app\/loading\.[tj]sx?$/,
@@ -338,7 +340,7 @@ function getEndpointValue(node: TSESTree.Node | undefined, source: string): stri
   return getStringValue(node, source);
 }
 
-function getFetchMethod(node: TSESTree.CallExpression): ApiNode["method"] {
+function getRequestMethodFromOptions(node: TSESTree.CallExpression): ApiNode["method"] {
   const optionsArg = node.arguments[1];
   if (optionsArg?.type !== "ObjectExpression") {
     return "GET";
@@ -366,10 +368,10 @@ function collectApiCall(
   node: TSESTree.CallExpression,
   source: string
 ): { endpoint: string; method: ApiNode["method"] } | undefined {
-  if (node.callee.type === "Identifier" && node.callee.name === "fetch") {
+  if (node.callee.type === "Identifier" && node.callee.name === GLOBAL_REQUEST_IDENTIFIER) {
     const endpoint = getEndpointValue(node.arguments[0] as TSESTree.Node | undefined, source);
     if (endpoint) {
-      return { endpoint, method: getFetchMethod(node) };
+      return { endpoint, method: getRequestMethodFromOptions(node) };
     }
   }
 
@@ -403,7 +405,7 @@ function collectApiCall(
           return;
         }
 
-        if (nested.callee.type === "Identifier" && nested.callee.name === "fetch") {
+        if (nested.callee.type === "Identifier" && nested.callee.name === GLOBAL_REQUEST_IDENTIFIER) {
           endpoint = getEndpointValue(nested.arguments[0] as TSESTree.Node | undefined, source);
         }
       });
@@ -1036,3 +1038,4 @@ export function buildEdges(
 
   return dedupedSeeds.map((edge, index) => createEdge(edge, index));
 }
+

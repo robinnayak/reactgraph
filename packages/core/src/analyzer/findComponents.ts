@@ -1,5 +1,6 @@
 import type { TSESTree } from "@typescript-eslint/types";
 import type { ComponentNode } from "../types.js";
+import type { AnalyzerConfig } from "./config.js";
 import {
   TS_GLOBS,
   createNodeId,
@@ -86,14 +87,14 @@ function getVariableTypeProps(
   return extractPropsFromTypeNode(declaration.id.typeAnnotation?.typeAnnotation, propsTypeMap, source);
 }
 
-export function findComponents(projectRoot: string): ComponentNode[] {
+export function findComponents(projectRoot: string, config?: AnalyzerConfig): ComponentNode[] {
   const components: ComponentNode[] = [];
 
   for (const filePath of resolveProjectFiles(projectRoot, TS_GLOBS)) {
     const relativePath = relativeFilePath(projectRoot, filePath);
     try {
       const module = parseModule(filePath);
-      if (!isComponentLikeFile(relativePath, module)) {
+      if (!isComponentLikeFile(relativePath, module, config)) {
         continue;
       }
 
@@ -206,3 +207,4 @@ export function findComponents(projectRoot: string): ComponentNode[] {
 
   return dedupeBy(components, (component) => component.id);
 }
+

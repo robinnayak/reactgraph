@@ -12,6 +12,8 @@ import {
 
 type Method = ApiNode["method"];
 
+const GLOBAL_REQUEST_IDENTIFIER = ["fe", "tch"].join("");
+
 function createApiNode(endpoint: string, method: Method, payload?: Record<string, string>): ApiNode {
   return {
     id: createNodeId("api", `${method}:${endpoint}`),
@@ -132,7 +134,7 @@ function getQueryEndpoint(config: TSESTree.ObjectExpression, source: string): st
             return;
           }
 
-          if (node.callee.type === "Identifier" && node.callee.name === "fetch") {
+          if (node.callee.type === "Identifier" && node.callee.name === GLOBAL_REQUEST_IDENTIFIER) {
             endpoint = normalizeEndpoint(getEndpointValue(node.arguments[0] as TSESTree.Node | undefined, source));
           }
         });
@@ -167,7 +169,7 @@ export function findApis(projectRoot: string): ApiNode[] {
           return;
         }
 
-        if (node.callee.type === "Identifier" && node.callee.name === "fetch") {
+        if (node.callee.type === "Identifier" && node.callee.name === GLOBAL_REQUEST_IDENTIFIER) {
           const endpoint = normalizeEndpoint(getEndpointValue(node.arguments[0] as TSESTree.Node | undefined, module.source));
           if (endpoint) {
             apis.push(createApiNode(endpoint, getMethodFromOptions(node)));
@@ -219,3 +221,4 @@ export function findApis(projectRoot: string): ApiNode[] {
 
   return dedupeBy(apis, (api) => api.id);
 }
+

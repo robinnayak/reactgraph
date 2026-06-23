@@ -191,6 +191,71 @@ describe("core analyzer", () => {
     expect(graph.edges.some((edge) => edge.relationshipType === "calls")).toBe(true);
   });
 
+  it("treats configured Sitecore renderings as page entries", async () => {
+    const root = makeProject({
+      "src/renderings/Hero.tsx": `
+        import { PromoCard } from "../components/PromoCard";
+        export default function Hero() {
+          return <PromoCard />;
+        }
+      `,
+      "src/components/PromoCard.tsx": `
+        export function PromoCard() {
+          return <article />;
+        }
+      `
+    });
+
+    const graph = await analyze(root, { writeJson: false, pagePatterns: ["src/renderings/**/*.tsx"] });
+    const renderingPage = graph.pages.find((page) => page.filePath === "src/renderings/Hero.tsx");
+    const renderingComponent = graph.components.find((component) => component.filePath === "src/renderings/Hero.tsx");
+    const promoCard = graph.components.find((component) => component.filePath === "src/components/PromoCard.tsx");
+
+    expect(renderingPage).toMatchObject({
+      name: "Hero",
+      type: "page"
+    });
+    expect(renderingComponent).toBeUndefined();
+    expect(promoCard).toMatchObject({
+      isUnused: false,
+      usageCount: 1,
+      usedInPages: [renderingPage?.id]
+    });
+  });
+
+  it("loads configured page patterns from reactgraph.config.json", async () => {
+    const root = makeProject({
+      "reactgraph.config.json": JSON.stringify({ pagePatterns: ["renderings/**/*.tsx"] }),
+      "renderings/ProductTeaser.tsx": `
+        export default function ProductTeaser() {
+          return <section />;
+        }
+      `
+    });
+
+    const graph = await analyze(root, { writeJson: false });
+
+    expect(graph.pages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "ProductTeaser",
+          filePath: "renderings/ProductTeaser.tsx"
+        })
+      ])
+    );
+    expect(graph.components.some((component) => component.filePath === "renderings/ProductTeaser.tsx")).toBe(false);
+  });
+
+  it("does not promote configured non-component files to pages", async () => {
+    const root = makeProject({
+      "src/renderings/rendering-data.ts": "export const renderingData = { title: 'Hero' };"
+    });
+
+    const graph = await analyze(root, { writeJson: false, pagePatterns: ["src/renderings/**/*.{ts,tsx}"] });
+
+    expect(graph.pages).toEqual([]);
+    expect(graph.components).toEqual([]);
+  });
   it("finds components without props safely", () => {
     const root = makeProjectFromFixtures(["NoPropsComponent.tsx"]);
 
@@ -729,3 +794,4 @@ describe("core analyzer", () => {
     expect(tree).not.toContain("deep.ts");
   });
 });
+
